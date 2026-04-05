@@ -158,7 +158,7 @@ const generarPDF = (turno, contratista, cuenta, firmaImg) => {
       No. Cuenta: ${cuenta.numero_consecutivo||"—"} · Token: ${cuenta.token}
     </div>
   </div>
-  <div class="footer">Este documento es constancia de pago por prestación de servicio.<br/>La firma digital tiene validez como constancia de recibo del pago a satisfacción.<br/>Generado el ${nowStr()}</div>
+  <div class="footer">Este documento es constancia de pago por prestación de servicio.<br/>La firma digital tiene validez como constancia de recibo del pago a satisfacción.</div>
   <button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar como PDF</button>
   </body></html>`;
 
