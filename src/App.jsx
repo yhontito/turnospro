@@ -1112,7 +1112,7 @@ export default function App() {
                     )}
                   </div>
                 </div>
-              ))}
+))}
               {usuarios.length===0&&<div style={{textAlign:"center",padding:40,color:G.muted}}>No hay usuarios registrados</div>}
             </div>
           </div>
@@ -1120,5 +1120,7 @@ export default function App() {
 
       </main>
     </div>
+  );
+}
   );
 }
