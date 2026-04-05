@@ -65,24 +65,102 @@ const FirmaCanvas = ({ onFirma }) => {
   const ref = useRef(null);
   const drawing = useRef(false);
   const hasDrawn = useRef(false);
-  const clear = () => { const c = ref.current; c.getContext("2d").clearRect(0, 0, c.width, c.height); hasDrawn.current = false; };
+  const points = useRef([]);
+  const lastVel = useRef(0);
+
+  useEffect(() => {
+    const c = ref.current;
+    const scale = window.devicePixelRatio || 2;
+    const rect = c.getBoundingClientRect();
+    c.width = rect.width * scale;
+    c.height = 200 * scale;
+    const ctx = c.getContext("2d");
+    ctx.scale(scale, scale);
+    ctx.strokeStyle = "#1d4ed8";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }, []);
+
   const getPos = (e, c) => {
     const r = c.getBoundingClientRect();
-    const sx = c.width / r.width, sy = c.height / r.height;
-    if (e.touches) return { x: (e.touches[0].clientX - r.left) * sx, y: (e.touches[0].clientY - r.top) * sy };
-    return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+    if (e.touches) return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
-  const start = (e) => { e.preventDefault(); drawing.current = true; hasDrawn.current = true; const c = ref.current, ctx = c.getContext("2d"), p = getPos(e, c); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
-  const draw = (e) => { e.preventDefault(); if (!drawing.current) return; const c = ref.current, ctx = c.getContext("2d"), p = getPos(e, c); ctx.lineTo(p.x, p.y); ctx.strokeStyle = "#1d4ed8"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke(); };
+
+  const drawSmooth = (ctx, pts) => {
+    if (pts.length < 3) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length - 2; i++) {
+      const mx = (pts[i].x + pts[i+1].x) / 2;
+      const my = (pts[i].y + pts[i+1].y) / 2;
+      // Calcular velocidad para simular presión
+      const dx = pts[i].x - pts[i-1].x;
+      const dy = pts[i].y - pts[i-1].y;
+      const vel = Math.sqrt(dx*dx + dy*dy);
+      const smoothVel = vel * 0.3 + lastVel.current * 0.7;
+      lastVel.current = smoothVel;
+      // Grosor varía entre 1.2 y 3.5 según velocidad
+      const width = Math.max(1.2, Math.min(3.5, 3.5 - smoothVel * 0.08));
+      ctx.lineWidth = width;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+    }
+    ctx.stroke();
+  };
+
+  const clear = () => {
+    const c = ref.current;
+    const scale = window.devicePixelRatio || 2;
+    const ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, c.width / scale, c.height / scale);
+    hasDrawn.current = false;
+    points.current = [];
+    lastVel.current = 0;
+  };
+
+  const start = (e) => {
+    e.preventDefault();
+    drawing.current = true;
+    hasDrawn.current = true;
+    const c = ref.current;
+    const p = getPos(e, c);
+    points.current = [p];
+    lastVel.current = 0;
+    const ctx = c.getContext("2d");
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  };
+
+  const draw = (e) => {
+    e.preventDefault();
+    if (!drawing.current) return;
+    const c = ref.current;
+    const ctx = c.getContext("2d");
+    const p = getPos(e, c);
+    points.current.push(p);
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = "#1d4ed8";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    drawSmooth(ctx, points.current);
+  };
+
   const stop = () => { drawing.current = false; };
-  const save = () => { if (!hasDrawn.current) { alert("Por favor dibuja tu firma antes de confirmar"); return; } onFirma(ref.current.toDataURL("image/png")); };
+
+  const save = () => {
+    if (!hasDrawn.current) { alert("Por favor dibuja tu firma antes de confirmar"); return; }
+    // Exportar a alta resolución
+    const c = ref.current;
+    onFirma(c.toDataURL("image/png", 1.0));
+  };
+
   return (
     <div>
       <div style={{ fontSize: 12, color: G.muted, marginBottom: 8 }}>Firma con tu dedo o mouse en el recuadro blanco:</div>
-      <canvas ref={ref} width={600} height={200}
+      <canvas ref={ref}
         onMouseDown={start} onMouseMove={draw} onMouseUp={stop} onMouseLeave={stop}
         onTouchStart={start} onTouchMove={draw} onTouchEnd={stop}
-        style={{ border: `2px dashed ${G.accent}`, borderRadius: 8, background: "#ffffff", touchAction: "none", width: "100%", cursor: "crosshair", display: "block" }} />
+        style={{ border: `2px dashed ${G.accent}`, borderRadius: 8, background: "#ffffff", touchAction: "none", width: "100%", height: "200px", cursor: "crosshair", display: "block" }} />
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <button className="btn-ghost" onClick={clear} style={{ flex: 1 }}>🗑 Limpiar</button>
         <button className="btn-primary" onClick={save} style={{ flex: 2 }}>✓ Confirmar Firma</button>
@@ -116,10 +194,10 @@ const generarPDF = (turno, contratista, cuenta, firmaImg) => {
     .badge{display:inline-block;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600}
     .footer{border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#94a3b8;text-align:center;line-height:1.6}
     .print-btn{display:block;margin:24px auto 0;background:#1d4ed8;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
-    @media print{.print-btn{display:none!important} @page{margin:1cm} footer,header{display:none!important}}
+    @media print{.print-btn{display:none!important}}
   </style></head><body>
   <div class="header">
-    <div><div class="logo">HUELLAS<span> SANAS</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de prestaciones de servicio</div></div>
+    <div><div class="logo">Prestación<span> de Servicio</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de prestaciones de servicio</div></div>
     <div class="doc-info"><strong>CUENTA DE COBRO</strong>No. ${cuenta.numero_consecutivo||cuenta.token.substring(0,8).toUpperCase()}<br/>Fecha: ${fmtFecha(TODAY)}<br/><br/><span class="badge">✓ FIRMADA</span></div>
   </div>
   <h2>Datos del Contratista</h2>
@@ -158,7 +236,7 @@ const generarPDF = (turno, contratista, cuenta, firmaImg) => {
       No. Cuenta: ${cuenta.numero_consecutivo||"—"} · Token: ${cuenta.token}
     </div>
   </div>
-  <div class="footer">Este documento es constancia de pago por prestación de servicio.<br/>La firma digital tiene validez como constancia de recibo del pago a satisfacción.</div>
+  <div class="footer">Este documento es constancia de pago por prestación de servicio.<br/>La firma digital tiene validez como constancia de recibo del pago a satisfacción.<br/>Generado el ${nowStr()}</div>
   <button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar como PDF</button>
   </body></html>`;
 
@@ -1049,6 +1127,8 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {view==="usuarios"&&userRol==="admin"&&(
           <div className="fade">
             <h2 style={{fontSize:20,fontWeight:700,marginBottom:22}}>Gestión de Usuarios</h2>
 
