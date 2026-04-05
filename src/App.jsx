@@ -119,7 +119,7 @@ const generarPDF = (turno, colaborador, cuenta, firmaImg) => {
     @media print{.print-btn{display:none!important}}
   </style></head><body>
   <div class="header">
-    <div><div class="logo">Turnos<span>PRO</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control de turnos y nómina</div></div>
+    <div><div class="logo">Huellas<span>Sanas</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de turnos</div></div>
     <div class="doc-info"><strong>CUENTA DE COBRO</strong>No. ${turno.id.substring(0,8).toUpperCase()}<br/>Fecha: ${fmtFecha(TODAY)}<br/><br/><span class="badge">✓ FIRMADA</span></div>
   </div>
   <h2>Datos del Colaborador</h2>
@@ -366,6 +366,33 @@ export default function App() {
     navigator.clipboard.writeText(link).then(()=>showToast("¡Enlace copiado! Envíalo al trabajador")).catch(()=>prompt("Copia este enlace:",link));
   };
 
+  const compartirWhatsApp = (turnoId)=>{
+    const turno=turnos.find(t=>t.id===turnoId);
+    const col=colMap[turno?.colaborador_id];
+    const cuenta=cuentas.find(c=>c.turno_id===turnoId);
+    if(!cuenta) return showToast("No se encontró la cuenta de cobro","err");
+    const link=`${window.location.origin}${window.location.pathname}?token=${cuenta.token}`;
+    const msg=`Hola ${col?.nombre||""}! 👋\n\nTe comparto tu cuenta de cobro de *HuellasSanas* correspondiente al turno del *${fmtFecha(turno.fecha)}*.\n\n💰 Total: *${COP(turno.pago)}*\n⏱ Horas: *${minToHrs(turno.horas_trabajadas)} hrs*\n\nPor favor firma aquí para confirmar que recibiste el pago:\n${link}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`,"_blank");
+  };
+
+  // Detectar turnos sin firmar después de 1 hora
+  useEffect(()=>{
+    if(!session||!turnos.length||!cuentas.length) return;
+    const ahora = new Date();
+    const sinFirmar = turnos.filter(t=>{
+      const cuenta=cuentas.find(c=>c.turno_id===t.id);
+      if(!cuenta||cuenta.firmada) return false;
+      const creado=new Date(t.created_at);
+      const diffHrs=(ahora-creado)/1000/60/60;
+      return diffHrs>=1 && diffHrs<2; // solo alertar entre 1 y 2 horas
+    });
+    if(sinFirmar.length>0){
+      const nombres=sinFirmar.map(t=>colMap[t.colaborador_id]?.nombre||"—").join(", ");
+      showToast(`⚠️ ${sinFirmar.length} turno(s) sin firmar hace más de 1 hora: ${nombres}`,"err");
+    }
+  },[turnos,cuentas]);
+
   const verPDF = async(turnoId)=>{
     setGenerandoPDF(turnoId);
     try {
@@ -393,9 +420,9 @@ export default function App() {
       {toast&&<Toast {...toast}/>}
       <div style={{width:"100%",maxWidth:400}} className="fade">
         <div style={{textAlign:"center",marginBottom:32}}>
-          <div style={{fontSize:40,marginBottom:8}}>🕐</div>
-          <div style={{fontSize:28,fontWeight:800,letterSpacing:"-.02em"}}>TurnosPRO</div>
-          <div style={{color:G.muted,fontSize:13,marginTop:4}}>Sistema de control de turnos y nómina</div>
+          <div style={{fontSize:40,marginBottom:8}}>🌿</div>
+          <div style={{fontSize:28,fontWeight:800,letterSpacing:"-.02em"}}>HuellasSanas</div>
+          <div style={{color:G.muted,fontSize:13,marginTop:4}}>Sistema de control y pago de turnos</div>
         </div>
         <div className="card">
           <div style={{display:"flex",gap:8,marginBottom:24}}>
@@ -431,8 +458,8 @@ export default function App() {
       {toast&&<Toast {...toast}/>}
       <header style={{background:G.card,borderBottom:`1px solid ${G.border}`,padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontSize:22}}>🕐</span>
-          <div><div style={{fontWeight:800,fontSize:16}}>TurnosPRO</div><div style={{fontSize:10,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".08em"}}>{userRol?.toUpperCase()}</div></div>
+          <span style={{fontSize:22}}>🌿</span>
+          <div><div style={{fontWeight:800,fontSize:16}}>HuellasSanas</div><div style={{fontSize:10,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".08em"}}>Sistema de control y pago de turnos · {userRol?.toUpperCase()}</div></div>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {navItems.map(n=>(
@@ -499,7 +526,10 @@ export default function App() {
                           <div style={{color:G.gold,fontWeight:700}}>{COP(t.pago)}</div>
                         </div>
                         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                          {cuenta&&!cuenta.firmada&&<button onClick={()=>copiarLink(t.id)} style={{background:"#0c1a3a",border:`1px solid ${G.accent}`,color:G.accent,padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📋 Enlace firma</button>}
+                          {cuenta&&!cuenta.firmada&&<>
+                            <button onClick={()=>copiarLink(t.id)} style={{background:"#0c1a3a",border:`1px solid ${G.accent}`,color:G.accent,padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📋 Copiar</button>
+                            <button onClick={()=>compartirWhatsApp(t.id)} style={{background:"#0a2010",border:"1px solid #25d366",color:"#25d366",padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📲 WhatsApp</button>
+                          </>}
                           {cuenta?.firmada&&<><span className="pill pill-green">✓ Firmado</span><button onClick={()=>verPDF(t.id)} disabled={generandoPDF===t.id} style={{background:"#1c1000",border:`1px solid ${G.gold}`,color:G.gold,padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>{generandoPDF===t.id?"...":"📄 PDF"}</button></>}
                         </div>
                       </div>
@@ -590,7 +620,10 @@ export default function App() {
                     <span className="pill pill-green">{minToHrs(t.horas_trabajadas)}h</span>
                     <div style={{fontWeight:700,color:G.gold,fontSize:14,minWidth:90,textAlign:"right"}}>{COP(t.pago)}</div>
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                      {cuenta&&!cuenta.firmada&&<button onClick={()=>copiarLink(t.id)} style={{background:"#0c1a3a",border:`1px solid ${G.accent}`,color:G.accent,padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📋 Enlace</button>}
+                      {cuenta&&!cuenta.firmada&&<>
+                        <button onClick={()=>copiarLink(t.id)} style={{background:"#0c1a3a",border:`1px solid ${G.accent}`,color:G.accent,padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📋</button>
+                        <button onClick={()=>compartirWhatsApp(t.id)} style={{background:"#0a2010",border:"1px solid #25d366",color:"#25d366",padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📲</button>
+                      </>}
                       {cuenta?.firmada&&<><span className="pill pill-green">✓</span><button onClick={()=>verPDF(t.id)} disabled={generandoPDF===t.id} style={{background:"#1c1000",border:`1px solid ${G.gold}`,color:G.gold,padding:"6px 10px",fontSize:11,borderRadius:6}}>{generandoPDF===t.id?"...":"📄 PDF"}</button></>}
                     </div>
                   </div>
@@ -601,10 +634,21 @@ export default function App() {
           </div>
         )}
 
-        {view==="reportes"&&userRol==="admin"&&(
+        {view==="reportes"&&userRol==="admin"&&(()=>{
+          // Calcular semana actual
+          const hoy=new Date();
+          const diaSemana=hoy.getDay()||7;
+          const lunes=new Date(hoy); lunes.setDate(hoy.getDate()-(diaSemana-1)); lunes.setHours(0,0,0,0);
+          const domingo=new Date(lunes); domingo.setDate(lunes.getDate()+6); domingo.setHours(23,59,59,999);
+          const fmtSemana=(d)=>d.toLocaleDateString("es-CO",{day:"2-digit",month:"short"});
+          const turnosSemana=turnos.filter(t=>{ const f=new Date(t.fecha+"T00:00:00"); return f>=lunes&&f<=domingo; });
+
+          return (
           <div className="fade">
             <h2 style={{fontSize:20,fontWeight:700,marginBottom:22}}>Reportes</h2>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
+
+            {/* Totales generales */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
               {[["Total colaboradores",colaboradores.length,"👥",G.accent],["Total turnos",turnos.length,"⏱",G.green],["Horas totales",`${minToHrs(turnos.reduce((s,t)=>s+t.horas_trabajadas,0))}`,"🕐",G.gold],["Total pagado",COP(turnos.reduce((s,t)=>s+t.pago,0)),"💰",G.green]].map(([l,v,icon,color])=>(
                 <div key={l} className="card" style={{display:"flex",alignItems:"center",gap:14}}>
                   <div style={{fontSize:28}}>{icon}</div>
@@ -612,6 +656,51 @@ export default function App() {
                 </div>
               ))}
             </div>
+
+            {/* Reporte semanal */}
+            <div style={{background:"#0c1a30",border:`1px solid #1e3a6e`,borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:15,color:G.text}}>📅 Reporte Semanal</div>
+                  <div style={{fontSize:12,color:G.muted,marginTop:2}}>{fmtSemana(lunes)} — {fmtSemana(domingo)}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:11,color:G.muted}}>TURNOS ESTA SEMANA</div>
+                  <div style={{fontSize:22,fontWeight:800,color:G.accent}}>{turnosSemana.length}</div>
+                </div>
+              </div>
+              {turnosSemana.length===0
+                ? <div style={{textAlign:"center",padding:20,color:G.muted,fontSize:13}}>No hay turnos registrados esta semana</div>
+                : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {colaboradores.map(c=>{
+                      const tc=turnosSemana.filter(t=>t.colaborador_id===c.id);
+                      if(!tc.length) return null;
+                      const hrs=tc.reduce((s,t)=>s+t.horas_trabajadas,0);
+                      const pago=tc.reduce((s,t)=>s+t.pago,0);
+                      const firmados=tc.filter(t=>cuentas.find(cc=>cc.turno_id===t.id&&cc.firmada)).length;
+                      return (
+                        <div key={c.id} style={{background:"#0a1520",border:`1px solid #1e2a3a`,borderRadius:8,padding:"12px 16px",display:"grid",gridTemplateColumns:"1fr 60px 90px 110px 80px",gap:12,alignItems:"center"}}>
+                          <div><div style={{fontWeight:600,fontSize:13}}>{c.nombre}</div><div style={{fontSize:11,color:G.muted}}>{tc.length} turno{tc.length>1?"s":""}</div></div>
+                          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:G.muted}}>DÍAS</div><div style={{fontWeight:700,color:G.accent}}>{tc.length}</div></div>
+                          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:G.muted}}>HORAS</div><div style={{fontWeight:700,color:G.green}}>{minToHrs(hrs)}</div></div>
+                          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:G.muted}}>A PAGAR</div><div style={{fontWeight:700,color:G.gold,fontSize:13}}>{COP(pago)}</div></div>
+                          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:G.muted}}>FIRMAS</div><div style={{fontWeight:700,color:firmados===tc.length?G.green:G.red}}>{firmados}/{tc.length}</div></div>
+                        </div>
+                      );
+                    })}
+                    <div style={{borderTop:`1px solid #1e3a6e`,paddingTop:12,marginTop:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div style={{fontSize:12,color:G.muted}}>Total semana</div>
+                      <div style={{display:"flex",gap:20}}>
+                        <div style={{textAlign:"right"}}><div style={{fontSize:10,color:G.muted}}>HORAS</div><div style={{fontWeight:800,color:G.green}}>{minToHrs(turnosSemana.reduce((s,t)=>s+t.horas_trabajadas,0))}</div></div>
+                        <div style={{textAlign:"right"}}><div style={{fontSize:10,color:G.muted}}>TOTAL</div><div style={{fontWeight:800,color:G.gold}}>{COP(turnosSemana.reduce((s,t)=>s+t.pago,0))}</div></div>
+                      </div>
+                    </div>
+                  </div>
+              }
+            </div>
+
+            {/* Por colaborador acumulado */}
+            <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".1em",marginBottom:12}}>ACUMULADO TOTAL POR COLABORADOR</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {colaboradores.map(c=>{
                 const tc=turnos.filter(t=>t.colaborador_id===c.id);
@@ -627,13 +716,14 @@ export default function App() {
                     <div style={{textAlign:"center"}}><div style={{fontSize:10,color:G.muted}}>TURNOS</div><div style={{fontWeight:700}}>{tc.length}</div></div>
                     <div style={{textAlign:"center"}}><div style={{fontSize:10,color:G.muted}}>HORAS</div><div style={{fontWeight:700,color:G.green}}>{minToHrs(hTotal)}</div></div>
                     <div style={{textAlign:"center"}}><div style={{fontSize:10,color:G.muted}}>TOTAL</div><div style={{fontWeight:700,color:G.gold}}>{COP(pTotal)}</div></div>
-                    <div style={{textAlign:"center"}}><div style={{fontSize:10,color:G.muted}}>FIRMADOS</div><div style={{fontWeight:700,color:G.green}}>{firmados}/{tc.length}</div></div>
+                    <div style={{textAlign:"center"}}><div style={{fontSize:10,color:G.muted}}>FIRMADOS</div><div style={{fontWeight:700,color:firmados===tc.length&&tc.length>0?G.green:G.red}}>{firmados}/{tc.length}</div></div>
                   </div>
                 );
               })}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {view==="usuarios"&&userRol==="admin"&&(
           <div className="fade">
