@@ -119,7 +119,7 @@ const generarPDF = (turno, contratista, cuenta, firmaImg) => {
     @media print{.print-btn{display:none!important}}
   </style></head><body>
   <div class="header">
-    <div><div class="logo">Prestación<span> de Servicio</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de prestaciones de servicio</div></div>
+    <div><div class="logo">HUELLAS<span> SANAS</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de prestaciones de servicio</div></div>
     <div class="doc-info"><strong>CUENTA DE COBRO</strong>No. ${cuenta.numero_consecutivo||cuenta.token.substring(0,8).toUpperCase()}<br/>Fecha: ${fmtFecha(TODAY)}<br/><br/><span class="badge">✓ FIRMADA</span></div>
   </div>
   <h2>Datos del Contratista</h2>
@@ -1112,7 +1112,7 @@ export default function App() {
                     )}
                   </div>
                 </div>
-))}
+              ))}
               {usuarios.length===0&&<div style={{textAlign:"center",padding:40,color:G.muted}}>No hay usuarios registrados</div>}
             </div>
           </div>
@@ -1120,7 +1120,5 @@ export default function App() {
 
       </main>
     </div>
-  );
-}
   );
 }
