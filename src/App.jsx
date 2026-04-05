@@ -136,7 +136,7 @@ const generarPDF = (turno, colaborador, cuenta, firmaImg) => {
     <div class="field"><label>Almuerzo</label><span>${almuerzo}</span></div>
     <div class="field"><label>Hora de salida</label><span>${fmtHora(turno.salida)}</span></div>
     <div class="field"><label>Horas trabajadas</label><span>${minToHrs(turno.horas_trabajadas)} horas</span></div>
-    <div class="field"><label>Registrado el</label><span>${turno.created_at ? new Date(turno.created_at).toLocaleString("es-CO") : "—"}</span></div>
+    <div class="field"><label>Método de pago</label><span>${turno.metodo_pago||"Efectivo"}</span></div>
   </div>
   <div class="total-box">
     <div><div class="lbl">TOTAL A PAGAR</div><div class="amt">${COP(turno.pago)}</div><div style="font-size:12px;opacity:.7;margin-top:4px">${minToHrs(turno.horas_trabajadas)} hrs × ${COP(colaborador.valor_hora)}/hr</div></div>
@@ -408,14 +408,21 @@ export default function App() {
   const [turnos, setTurnos] = useState([]);
   const [cuentas, setCuentas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
-  const [turnoForm, setTurnoForm] = useState({ colaborador_id:"", fecha:TODAY, entrada:"", salida_almuerzo:"", ingreso_almuerzo:"", salida:"" });
+  const [turnoForm, setTurnoForm] = useState({ colaborador_id:"", fecha:TODAY, entrada:"", salida_almuerzo:"", ingreso_almuerzo:"", salida:"", metodo_pago:"efectivo" });
   const [colForm, setColForm] = useState({ nombre:"", cedula:"", celular:"", valor_hora:"" });
   const [editCol, setEditCol] = useState(null);
+  const [editTurno, setEditTurno] = useState(null);
   const [authForm, setAuthForm] = useState({ email:"", password:"" });
   const [filterCol, setFilterCol] = useState("");
+  const [filterFechaDesde, setFilterFechaDesde] = useState("");
+  const [filterFechaHasta, setFilterFechaHasta] = useState("");
   const [generandoPDF, setGenerandoPDF] = useState(null);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
   const [nuevoUsuario, setNuevoUsuario] = useState({ email:"", password:"", rol:"supervisor" });
   const [creandoUsuario, setCreandoUsuario] = useState(false);
+  const [anticipos, setAnticipos] = useState([]);
+  const [anticipoForm, setAnticipoForm] = useState({ colaborador_id:"", monto:"", descripcion:"" });
+  const [showAnticipos, setShowAnticipos] = useState(false);
 
   const urlToken = new URLSearchParams(window.location.search).get("token");
   if (urlToken) return <><style>{css}</style><PaginaFirma token={urlToken} /></>;
@@ -437,21 +444,32 @@ export default function App() {
 
   useEffect(()=>{
     if(!session) return;
-    loadColaboradores(); loadTurnos(); loadCuentas();
+    loadColaboradores(); loadTurnos(); loadCuentas(); loadAnticipos();
     if(userRol==="admin") loadUsuarios();
-    // Tiempo real: detecta firmas nuevas
     const sub = supabase.channel("cuentas_realtime")
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"cuentas_cobro"},()=>{
         loadCuentas();
         showToast("🖊 ¡Un colaborador acaba de firmar su cuenta de cobro!");
       }).subscribe();
-    return ()=>supabase.removeChannel(sub);
+
+    // Recordatorio fin de día a las 6pm
+    const checkRecordatorio = ()=>{
+      const ahora=new Date();
+      if(ahora.getHours()===18&&ahora.getMinutes()===0){
+        supabase.from("cuentas_cobro").select("*").eq("firmada",false).then(({data})=>{
+          if(data?.length>0) showToast(`⏰ Recordatorio: ${data.length} cuenta(s) de cobro pendiente(s) de firma`,"err");
+        });
+      }
+    };
+    const intervalo=setInterval(checkRecordatorio,60000);
+    return ()=>{ supabase.removeChannel(sub); clearInterval(intervalo); };
   },[session,userRol]);
 
   const loadColaboradores = async()=>{ const {data}=await supabase.from("colaboradores").select("*").order("nombre"); setColaboradores(data||[]); };
   const loadTurnos = async()=>{ const {data}=await supabase.from("turnos").select("*").order("fecha",{ascending:false}); setTurnos(data||[]); };
   const loadCuentas = async()=>{ const {data}=await supabase.from("cuentas_cobro").select("*"); setCuentas(data||[]); };
   const loadUsuarios = async()=>{ const {data}=await supabase.from("user_roles").select("*").order("created_at"); setUsuarios(data||[]); };
+  const loadAnticipos = async()=>{ const {data}=await supabase.from("anticipos").select("*").order("created_at",{ascending:false}); setAnticipos(data||[]); };
 
   const handleLogin = async()=>{ setLoading(true); const {error}=await supabase.auth.signInWithPassword({email:authForm.email,password:authForm.password}); if(error){showToast(error.message,"err");setLoading(false);} };
   const handleRegister = async()=>{
@@ -471,13 +489,62 @@ export default function App() {
     if(!mins) return showToast("Revisa los horarios ingresados","err");
     const col = colaboradores.find(c=>c.id===turnoForm.colaborador_id);
     const pago = (mins/60)*col.valor_hora;
-    const {data:t,error}=await supabase.from("turnos").insert({...turnoForm,horas_trabajadas:mins,pago,creado_por:session.user.id}).select().single();
-    if(error) return showToast("Error al guardar turno","err");
-    await supabase.from("cuentas_cobro").insert({turno_id:t.id,token:genToken()});
-    await supabase.from("auditoria").insert({user_id:session.user.id,accion:"crear_turno",tabla:"turnos",registro_id:t.id,detalle:{colaborador:col.nombre,pago}});
+    // Verificar si hay anticipo pendiente para descontar
+    const anticipoPendiente = anticipos.find(a=>a.colaborador_id===turnoForm.colaborador_id&&!a.descontado);
+    const pagoFinal = anticipoPendiente ? Math.max(0, pago - anticipoPendiente.monto) : pago;
+
+    if(editTurno) {
+      const {error}=await supabase.from("turnos").update({...turnoForm,horas_trabajadas:mins,pago:pagoFinal}).eq("id",editTurno);
+      if(error) return showToast("Error al actualizar turno","err");
+      if(anticipoPendiente){ await supabase.from("anticipos").update({descontado:true,turno_descuento_id:editTurno}).eq("id",anticipoPendiente.id); loadAnticipos(); }
+      setEditTurno(null);
+      showToast(`✓ Turno actualizado · ${minToHrs(mins)} hrs · ${COP(pagoFinal)}`);
+    } else {
+      const {data:t,error}=await supabase.from("turnos").insert({...turnoForm,horas_trabajadas:mins,pago:pagoFinal,creado_por:session.user.id}).select().single();
+      if(error) return showToast("Error al guardar turno","err");
+      await supabase.from("cuentas_cobro").insert({turno_id:t.id,token:genToken()});
+      await supabase.from("auditoria").insert({user_id:session.user.id,accion:"crear_turno",tabla:"turnos",registro_id:t.id,detalle:{colaborador:col.nombre,pago:pagoFinal}});
+      if(anticipoPendiente){ await supabase.from("anticipos").update({descontado:true,turno_descuento_id:t.id}).eq("id",anticipoPendiente.id); loadAnticipos(); showToast(`✓ Turno guardado · Anticipo de ${COP(anticipoPendiente.monto)} descontado · Neto: ${COP(pagoFinal)}`); }
+      else showToast(`✓ Turno guardado · ${minToHrs(mins)} hrs · ${COP(pagoFinal)}`);
+    }
     loadTurnos(); loadCuentas();
-    setTurnoForm(f=>({...f,entrada:"",salida_almuerzo:"",ingreso_almuerzo:"",salida:""}));
-    showToast(`✓ Turno guardado · ${minToHrs(mins)} hrs · ${COP(pago)}`);
+    setTurnoForm(f=>({...f,entrada:"",salida_almuerzo:"",ingreso_almuerzo:"",salida:"",metodo_pago:"efectivo"}));
+  };
+
+  const deleteTurno = async(id)=>{
+    if(!confirm("¿Eliminar este turno? Esta acción no se puede deshacer.")) return;
+    await supabase.from("cuentas_cobro").delete().eq("turno_id",id);
+    await supabase.from("turnos").delete().eq("id",id);
+    loadTurnos(); loadCuentas();
+    showToast("Turno eliminado");
+  };
+
+  const saveAnticipos = async()=>{
+    if(!anticipoForm.colaborador_id||!anticipoForm.monto) return showToast("Selecciona colaborador y monto","err");
+    await supabase.from("anticipos").insert({ colaborador_id:anticipoForm.colaborador_id, monto:Number(anticipoForm.monto), descripcion:anticipoForm.descripcion, creado_por:session.user.id });
+    setAnticipoForm({colaborador_id:"",monto:"",descripcion:""});
+    loadAnticipos();
+    showToast("Anticipo registrado — se descontará del próximo turno");
+  };
+
+  const exportarExcel = ()=>{
+    setExportandoExcel(true);
+    try {
+      const filas = turnosFiltrados.map(t=>{
+        const col=colMap[t.colaborador_id];
+        const cuenta=cuentas.find(c=>c.turno_id===t.id);
+        return [t.fecha, col?.nombre||"—", col?.cedula||"—", fmtHora(t.entrada), t.salida_almuerzo?fmtHora(t.salida_almuerzo):"", t.ingreso_almuerzo?fmtHora(t.ingreso_almuerzo):"", fmtHora(t.salida), minToHrs(t.horas_trabajadas), t.metodo_pago||"efectivo", t.pago, cuenta?.firmada?"Sí":"No"];
+      });
+      const header=["Fecha","Colaborador","Cédula","Entrada","Sale Almuerzo","Regresa Almuerzo","Salida","Horas","Método Pago","Total Pago","Firmado"];
+      const csvContent = [header,...filas].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
+      const blob=new Blob(["\uFEFF"+csvContent],{type:"text/csv;charset=utf-8;"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url; a.download=`huellas-sanas-turnos-${TODAY}.csv`; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),3000);
+      showToast("✓ Archivo descargado");
+    } catch(e){ showToast("Error al exportar","err"); }
+    setExportandoExcel(false);
   };
 
   const saveCol = async()=>{
@@ -541,8 +608,16 @@ export default function App() {
   const previewMins = turnoForm.entrada&&turnoForm.salida ? calcHoras(turnoForm) : 0;
   const previewCol = colaboradores.find(c=>c.id===turnoForm.colaborador_id);
   const previewPago = previewMins&&previewCol ? (previewMins/60)*previewCol.valor_hora : 0;
-  const turnosFiltrados = turnos.filter(t=>!filterCol||t.colaborador_id===filterCol);
+  const anticipoPendiente = previewCol ? anticipos.find(a=>a.colaborador_id===previewCol.id&&!a.descontado) : null;
+  const previewPagoFinal = anticipoPendiente ? Math.max(0, previewPago - anticipoPendiente.monto) : previewPago;
+  const turnosFiltrados = turnos.filter(t=>{
+    if(filterCol && t.colaborador_id!==filterCol) return false;
+    if(filterFechaDesde && t.fecha<filterFechaDesde) return false;
+    if(filterFechaHasta && t.fecha>filterFechaHasta) return false;
+    return true;
+  });
   const colMap = Object.fromEntries(colaboradores.map(c=>[c.id,c]));
+  const METODOS = [{v:"efectivo",l:"💵 Efectivo"},{v:"transferencia",l:"🏦 Transferencia"},{v:"nequi",l:"📲 Nequi"},{v:"daviplata",l:"📲 Daviplata"}];
 
   if(loading) return <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><style>{css}</style><Spinner /><div style={{color:G.muted,fontSize:13}}>Cargando...</div></div>;
 
@@ -581,6 +656,7 @@ export default function App() {
     {id:"turnos",label:"Turnos",icon:"⏱"},
     {id:"colaboradores",label:"Colaboradores",icon:"👥"},
     {id:"historial",label:"Historial",icon:"📋"},
+    {id:"anticipos",label:"Anticipos",icon:"💸"},
     ...(userRol==="admin"?[{id:"reportes",label:"Reportes",icon:"📊"},{id:"usuarios",label:"Usuarios",icon:"🔐"}]:[]),
   ];
 
@@ -632,12 +708,35 @@ export default function App() {
                   ))}
                 </div>
                 {previewMins>0&&(
-                  <div style={{background:"linear-gradient(135deg,#061a0c,#0c1a30)",border:`1px solid ${G.border}`,borderRadius:10,padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div><div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>HORAS TRABAJADAS</div><div style={{fontSize:24,fontWeight:800,color:G.green}}>{minToHrs(previewMins)} hrs</div></div>
-                    <div style={{textAlign:"right"}}><div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>PAGO ESTIMADO</div><div style={{fontSize:24,fontWeight:800,color:G.gold}}>{COP(previewPago)}</div></div>
+                  <div style={{background:"linear-gradient(135deg,#061a0c,#0c1a30)",border:`1px solid ${G.border}`,borderRadius:10,padding:"14px 20px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div><div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>HORAS TRABAJADAS</div><div style={{fontSize:24,fontWeight:800,color:G.green}}>{minToHrs(previewMins)} hrs</div></div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>PAGO {anticipoPendiente?"NETO":"ESTIMADO"}</div>
+                        <div style={{fontSize:24,fontWeight:800,color:G.gold}}>{COP(previewPagoFinal)}</div>
+                      </div>
+                    </div>
+                    {anticipoPendiente&&(
+                      <div style={{marginTop:10,padding:"8px 12px",background:"#1f0a0a",border:`1px solid #5a1a1a`,borderRadius:6,fontSize:12,color:G.red}}>
+                        ⚠️ Se descontará anticipo de {COP(anticipoPendiente.monto)}: {anticipoPendiente.descripcion||"Sin descripción"}
+                      </div>
+                    )}
                   </div>
                 )}
-                <button className="btn-primary" style={{padding:"13px 0",fontSize:15}} onClick={saveTurno}>Guardar Turno →</button>
+                <div>
+                  <label>Método de pago</label>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+                    {METODOS.map(m=>(
+                      <button key={m.v} onClick={()=>setTurnoForm(f=>({...f,metodo_pago:m.v}))} style={{padding:"9px 0",fontSize:12,background:turnoForm.metodo_pago===m.v?G.accent:G.surface,color:turnoForm.metodo_pago===m.v?"#fff":G.muted,border:`1px solid ${turnoForm.metodo_pago===m.v?G.accent:G.border}`}}>
+                        {m.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn-primary" style={{flex:1,padding:"13px 0",fontSize:15}} onClick={saveTurno}>{editTurno?"Actualizar Turno →":"Guardar Turno →"}</button>
+                  {editTurno&&<button className="btn-ghost" style={{padding:"13px 20px"}} onClick={()=>{setEditTurno(null);setTurnoForm({colaborador_id:"",fecha:TODAY,entrada:"",salida_almuerzo:"",ingreso_almuerzo:"",salida:"",metodo_pago:"efectivo"});}}>Cancelar</button>}
+                </div>
               </div>
             )}
             {turnos.length>0&&(
@@ -657,10 +756,11 @@ export default function App() {
                           <div style={{color:G.green,fontSize:13,fontFamily:"'JetBrains Mono'"}}>{minToHrs(t.horas_trabajadas)} hrs</div>
                           <div style={{color:G.gold,fontWeight:700}}>{COP(t.pago)}</div>
                         </div>
-                        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                           {cuenta&&!cuenta.firmada&&<>
                             <button onClick={()=>copiarLink(t.id)} style={{background:"#0c1a3a",border:`1px solid ${G.accent}`,color:G.accent,padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📋 Copiar</button>
                             <button onClick={()=>compartirWhatsApp(t.id)} style={{background:"#0a2010",border:"1px solid #25d366",color:"#25d366",padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📲 WhatsApp</button>
+                            {userRol==="admin"&&<><button onClick={()=>{setEditTurno(t.id);setTurnoForm({colaborador_id:t.colaborador_id,fecha:t.fecha,entrada:t.entrada,salida_almuerzo:t.salida_almuerzo||"",ingreso_almuerzo:t.ingreso_almuerzo||"",salida:t.salida,metodo_pago:t.metodo_pago||"efectivo"});window.scrollTo(0,0);}} style={{background:"#1a1a0a",border:`1px solid ${G.gold}`,color:G.gold,padding:"6px 10px",fontSize:11,borderRadius:6}}>✏️</button><button onClick={()=>deleteTurno(t.id)} style={{background:"#1f0a0a",border:`1px solid ${G.red}`,color:G.red,padding:"6px 10px",fontSize:11,borderRadius:6}}>🗑</button></>}
                           </>}
                           {cuenta?.firmada&&<><span className="pill pill-green">✓ Firmado</span><button onClick={()=>verPDF(t.id)} disabled={generandoPDF===t.id} style={{background:"#1c1000",border:`1px solid ${G.gold}`,color:G.gold,padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>{generandoPDF===t.id?"...":"📄 PDF"}</button></>}
                         </div>
@@ -722,12 +822,26 @@ export default function App() {
 
         {view==="historial"&&(
           <div className="fade">
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
-              <h2 style={{fontSize:20,fontWeight:700}}>Historial de Turnos</h2>
-              <select value={filterCol} onChange={e=>setFilterCol(e.target.value)} style={{width:"auto",minWidth:180}}>
-                <option value="">Todos los colaboradores</option>
-                {colaboradores.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
+            <div style={{marginBottom:22}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <h2 style={{fontSize:20,fontWeight:700}}>Historial de Turnos</h2>
+                <button onClick={exportarExcel} disabled={exportandoExcel} style={{background:"#052e16",border:`1px solid ${G.green}`,color:G.green,padding:"8px 14px",fontSize:12,borderRadius:8,fontWeight:600}}>
+                  {exportandoExcel?"...":"📥 Exportar CSV"}
+                </button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                <div><label>Colaborador</label>
+                  <select value={filterCol} onChange={e=>setFilterCol(e.target.value)}>
+                    <option value="">Todos</option>
+                    {colaboradores.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  </select>
+                </div>
+                <div><label>Desde</label><input type="date" value={filterFechaDesde} onChange={e=>setFilterFechaDesde(e.target.value)}/></div>
+                <div><label>Hasta</label><input type="date" value={filterFechaHasta} onChange={e=>setFilterFechaHasta(e.target.value)}/></div>
+              </div>
+              {(filterCol||filterFechaDesde||filterFechaHasta)&&(
+                <button className="btn-ghost" style={{marginTop:8,fontSize:11}} onClick={()=>{setFilterCol("");setFilterFechaDesde("");setFilterFechaHasta("");}}>✕ Limpiar filtros</button>
+              )}
             </div>
             {turnosFiltrados.length>0&&(
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:20}}>
@@ -751,10 +865,12 @@ export default function App() {
                     </div>
                     <span className="pill pill-green">{minToHrs(t.horas_trabajadas)}h</span>
                     <div style={{fontWeight:700,color:G.gold,fontSize:14,minWidth:90,textAlign:"right"}}>{COP(t.pago)}</div>
-                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>{METODOS.find(m=>m.v===t.metodo_pago)?.l||"💵 Efectivo"}</span>
                       {cuenta&&!cuenta.firmada&&<>
                         <button onClick={()=>copiarLink(t.id)} style={{background:"#0c1a3a",border:`1px solid ${G.accent}`,color:G.accent,padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📋</button>
                         <button onClick={()=>compartirWhatsApp(t.id)} style={{background:"#0a2010",border:"1px solid #25d366",color:"#25d366",padding:"6px 10px",fontSize:11,borderRadius:6,whiteSpace:"nowrap"}}>📲</button>
+                        {userRol==="admin"&&<><button onClick={()=>{setEditTurno(t.id);setTurnoForm({colaborador_id:t.colaborador_id,fecha:t.fecha,entrada:t.entrada,salida_almuerzo:t.salida_almuerzo||"",ingreso_almuerzo:t.ingreso_almuerzo||"",salida:t.salida,metodo_pago:t.metodo_pago||"efectivo"});setView("turnos");window.scrollTo(0,0);}} style={{background:"#1a1a0a",border:`1px solid ${G.gold}`,color:G.gold,padding:"6px 8px",fontSize:11,borderRadius:6}}>✏️</button><button onClick={()=>deleteTurno(t.id)} style={{background:"#1f0a0a",border:`1px solid ${G.red}`,color:G.red,padding:"6px 8px",fontSize:11,borderRadius:6}}>🗑</button></>}
                       </>}
                       {cuenta?.firmada&&<><span className="pill pill-green">✓</span><button onClick={()=>verPDF(t.id)} disabled={generandoPDF===t.id} style={{background:"#1c1000",border:`1px solid ${G.gold}`,color:G.gold,padding:"6px 10px",fontSize:11,borderRadius:6}}>{generandoPDF===t.id?"...":"📄 PDF"}</button></>}
                     </div>
@@ -857,7 +973,70 @@ export default function App() {
           );
         })()}
 
-        {view==="usuarios"&&userRol==="admin"&&(
+        {view==="anticipos"&&(
+          <div className="fade">
+            <h2 style={{fontSize:20,fontWeight:700,marginBottom:22}}>💸 Anticipos y Préstamos</h2>
+            {userRol==="admin"&&(
+              <div className="card" style={{marginBottom:20}}>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>Registrar anticipo</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
+                  <div><label>Colaborador</label>
+                    <select value={anticipoForm.colaborador_id} onChange={e=>setAnticipoForm(f=>({...f,colaborador_id:e.target.value}))}>
+                      <option value="">— Seleccionar —</option>
+                      {colaboradores.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div><label>Monto (COP)</label><input type="number" placeholder="Ej: 50000" value={anticipoForm.monto} onChange={e=>setAnticipoForm(f=>({...f,monto:e.target.value}))}/></div>
+                  <div><label>Descripción</label><input placeholder="Ej: Préstamo personal" value={anticipoForm.descripcion} onChange={e=>setAnticipoForm(f=>({...f,descripcion:e.target.value}))}/></div>
+                </div>
+                <button className="btn-primary" onClick={saveAnticipos}>+ Registrar anticipo</button>
+                <div style={{fontSize:12,color:G.muted,marginTop:10}}>⚠️ El anticipo se descontará automáticamente del próximo turno del colaborador</div>
+              </div>
+            )}
+
+            {/* Pendientes */}
+            <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".1em",marginBottom:10}}>PENDIENTES DE DESCUENTO</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:24}}>
+              {anticipos.filter(a=>!a.descontado).map(a=>{
+                const col=colMap[a.colaborador_id];
+                return (
+                  <div key={a.id} className="card" style={{padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",border:`1px solid #5a1a1a`,background:"#1a0a0a"}}>
+                    <div>
+                      <div style={{fontWeight:600}}>{col?.nombre||"—"}</div>
+                      <div style={{fontSize:12,color:G.muted,marginTop:2}}>{a.descripcion||"Sin descripción"} · {new Date(a.created_at).toLocaleDateString("es-CO")}</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{color:G.red,fontWeight:700,fontSize:16}}>{COP(a.monto)}</div>
+                      <span className="pill pill-red">Pendiente</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {anticipos.filter(a=>!a.descontado).length===0&&<div style={{textAlign:"center",padding:20,color:G.muted,fontSize:13}}>No hay anticipos pendientes</div>}
+            </div>
+
+            {/* Descontados */}
+            <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".1em",marginBottom:10}}>HISTORIAL DESCONTADOS</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {anticipos.filter(a=>a.descontado).map(a=>{
+                const col=colMap[a.colaborador_id];
+                return (
+                  <div key={a.id} className="card" style={{padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <div style={{fontWeight:600}}>{col?.nombre||"—"}</div>
+                      <div style={{fontSize:12,color:G.muted,marginTop:2}}>{a.descripcion||"Sin descripción"} · {new Date(a.created_at).toLocaleDateString("es-CO")}</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{color:G.muted,fontWeight:700,fontSize:15,textDecoration:"line-through"}}>{COP(a.monto)}</div>
+                      <span className="pill pill-green">✓ Descontado</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {anticipos.filter(a=>a.descontado).length===0&&<div style={{textAlign:"center",padding:20,color:G.muted,fontSize:13}}>No hay anticipos descontados aún</div>}
+            </div>
+          </div>
+        )}
           <div className="fade">
             <h2 style={{fontSize:20,fontWeight:700,marginBottom:22}}>Gestión de Usuarios</h2>
 
