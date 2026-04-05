@@ -92,9 +92,12 @@ const FirmaCanvas = ({ onFirma }) => {
 };
 
 const generarPDF = (turno, colaborador, cuenta, firmaImg) => {
-  const win = window.open("", "_blank");
   const almuerzo = turno.salida_almuerzo ? `${fmtHora(turno.salida_almuerzo)} → ${fmtHora(turno.ingreso_almuerzo)}` : "Sin almuerzo";
-  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
+  const firmaHtml = firmaImg
+    ? `<img src="${firmaImg}" alt="Firma" style="max-width:100%;max-height:150px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;display:block;margin:10px auto"/>`
+    : `<div style="padding:30px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:6px;text-align:center">Sin firma registrada</div>`;
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
   <title>Cuenta de Cobro - ${colaborador.nombre}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -109,26 +112,25 @@ const generarPDF = (turno, colaborador, cuenta, firmaImg) => {
     .field span{font-size:14px;font-weight:600;color:#1a1a2e}
     .total-box{background:linear-gradient(135deg,#1d4ed8,#1e40af);color:#fff;border-radius:10px;padding:22px 26px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
     .total-box .lbl{font-size:12px;opacity:.8;margin-bottom:4px}.total-box .amt{font-size:32px;font-weight:800}
-    .firma-box{border:2px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:18px;text-align:center}
-    .firma-box img{max-width:100%;max-height:140px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;display:block;margin:10px auto}
-    .badge{display:inline-block;background:#052e16;color:#10b981;border:1px solid #14532d;border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600}
+    .firma-box{border:2px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:18px}
+    .badge{display:inline-block;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600}
     .footer{border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#94a3b8;text-align:center;line-height:1.6}
     .print-btn{display:block;margin:24px auto 0;background:#1d4ed8;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
-    @media print{.print-btn{display:none}}
+    @media print{.print-btn{display:none!important}}
   </style></head><body>
   <div class="header">
     <div><div class="logo">Turnos<span>PRO</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control de turnos y nómina</div></div>
-    <div class="doc-info"><strong>CUENTA DE COBRO</strong>No. ${turno.id.substring(0,8).toUpperCase()}<br/>Fecha: ${fmtFecha(TODAY)}<br/><span class="badge">✓ FIRMADA</span></div>
+    <div class="doc-info"><strong>CUENTA DE COBRO</strong>No. ${turno.id.substring(0,8).toUpperCase()}<br/>Fecha: ${fmtFecha(TODAY)}<br/><br/><span class="badge">✓ FIRMADA</span></div>
   </div>
   <h2>Datos del Colaborador</h2>
-  <div class="section grid">
+  <div class="section grid" style="margin-bottom:18px">
     <div class="field"><label>Nombre completo</label><span>${colaborador.nombre}</span></div>
     <div class="field"><label>Cédula</label><span>${colaborador.cedula || "—"}</span></div>
     <div class="field"><label>Celular</label><span>${colaborador.celular || "—"}</span></div>
     <div class="field"><label>Valor por hora</label><span>${COP(colaborador.valor_hora)}</span></div>
   </div>
   <h2>Detalle del Turno</h2>
-  <div class="section grid">
+  <div class="section grid" style="margin-bottom:18px">
     <div class="field"><label>Fecha del turno</label><span>${fmtFecha(turno.fecha)}</span></div>
     <div class="field"><label>Hora de entrada</label><span>${fmtHora(turno.entrada)}</span></div>
     <div class="field"><label>Almuerzo</label><span>${almuerzo}</span></div>
@@ -143,16 +145,30 @@ const generarPDF = (turno, colaborador, cuenta, firmaImg) => {
   <h2>Firma del Colaborador</h2>
   <div class="firma-box">
     <div style="font-size:12px;color:#64748b;margin-bottom:10px">El colaborador firma confirmando que recibió el pago a satisfacción:</div>
-    ${firmaImg ? `<img src="${firmaImg}" alt="Firma"/>` : '<div style="padding:30px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:6px">Sin firma registrada</div>'}
-    <div style="font-size:11px;color:#94a3b8;margin-top:10px">
+    ${firmaHtml}
+    <div style="font-size:11px;color:#94a3b8;margin-top:12px;text-align:center">
       Firmado el ${cuenta.firmado_en ? new Date(cuenta.firmado_en).toLocaleString("es-CO", { dateStyle: "full", timeStyle: "short" }) : "—"}<br/>
-      Token: ${cuenta.token}
+      Token de verificación: ${cuenta.token}
     </div>
   </div>
   <div class="footer">Este documento es constancia de pago generada por TurnosPRO.<br/>La firma digital tiene validez como constancia de recibo del pago.<br/>Generado el ${nowStr()}</div>
   <button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar como PDF</button>
-  </body></html>`);
-  win.document.close();
+  </body></html>`;
+
+  // Usar Blob para evitar bloqueo de base64 en ventanas nuevas
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank");
+  if (win) {
+    win.onload = () => URL.revokeObjectURL(url);
+  } else {
+    // Si el navegador bloquea popups, descargar directamente
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cuenta-cobro-${colaborador.nombre.replace(/\s+/g,"-")}-${turno.fecha}.html`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }
 };
 
 // ── Página Pública de Firma ──
