@@ -91,14 +91,14 @@ const FirmaCanvas = ({ onFirma }) => {
   );
 };
 
-const generarPDF = (turno, colaborador, cuenta, firmaImg) => {
-  const almuerzo = turno.salida_almuerzo ? `${fmtHora(turno.salida_almuerzo)} → ${fmtHora(turno.ingreso_almuerzo)}` : "Sin almuerzo";
+const generarPDF = (turno, contratista, cuenta, firmaImg) => {
+  const almuerzo = turno.salida_almuerzo ? `${fmtHora(turno.salida_almuerzo)} → ${fmtHora(turno.ingreso_almuerzo)}` : "Sin descanso";
   const firmaHtml = firmaImg
     ? `<img src="${firmaImg}" alt="Firma" style="max-width:100%;max-height:150px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;display:block;margin:10px auto"/>`
     : `<div style="padding:30px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:6px;text-align:center">Sin firma registrada</div>`;
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
-  <title>Cuenta de Cobro - ${colaborador.nombre}</title>
+  <title>Cuenta de Cobro - ${contratista.nombre}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Segoe UI',sans-serif;color:#1a1a2e;background:#fff;padding:40px;max-width:750px;margin:0 auto}
@@ -119,57 +119,57 @@ const generarPDF = (turno, colaborador, cuenta, firmaImg) => {
     @media print{.print-btn{display:none!important}}
   </style></head><body>
   <div class="header">
-    <div><div class="logo">Huellas<span>Sanas</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de turnos</div></div>
-    <div class="doc-info"><strong>CUENTA DE COBRO</strong>No. ${turno.id.substring(0,8).toUpperCase()}<br/>Fecha: ${fmtFecha(TODAY)}<br/><br/><span class="badge">✓ FIRMADA</span></div>
+    <div><div class="logo">Prestación<span> de Servicio</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de prestaciones de servicio</div></div>
+    <div class="doc-info"><strong>CUENTA DE COBRO</strong>No. ${cuenta.numero_consecutivo||cuenta.token.substring(0,8).toUpperCase()}<br/>Fecha: ${fmtFecha(TODAY)}<br/><br/><span class="badge">✓ FIRMADA</span></div>
   </div>
-  <h2>Datos del Colaborador</h2>
+  <h2>Datos del Contratista</h2>
   <div class="section grid" style="margin-bottom:18px">
-    <div class="field"><label>Nombre completo</label><span>${colaborador.nombre}</span></div>
-    <div class="field"><label>Cédula</label><span>${colaborador.cedula || "—"}</span></div>
-    <div class="field"><label>Celular</label><span>${colaborador.celular || "—"}</span></div>
-    <div class="field"><label>Valor por hora</label><span>${COP(colaborador.valor_hora)}</span></div>
+    <div class="field"><label>Nombre completo</label><span>${contratista.nombre}</span></div>
+    <div class="field"><label>Cédula</label><span>${contratista.cedula||"—"}</span></div>
+    <div class="field"><label>Celular</label><span>${contratista.celular||"—"}</span></div>
+    <div class="field"><label>Perfil</label><span>${contratista.perfil||"—"}</span></div>
+    <div class="field"><label>Área</label><span>${contratista.area||"—"}</span></div>
+    <div class="field"><label>Tipo de contrato</label><span>${contratista.tipo_contrato||"—"}</span></div>
+    <div class="field"><label>Valor por hora de servicio</label><span>${COP(contratista.valor_hora)}</span></div>
   </div>
-  <h2>Detalle del Turno</h2>
+  <h2>Detalle de la Prestación de Servicio</h2>
   <div class="section grid" style="margin-bottom:18px">
-    <div class="field"><label>Fecha del turno</label><span>${fmtFecha(turno.fecha)}</span></div>
-    <div class="field"><label>Hora de entrada</label><span>${fmtHora(turno.entrada)}</span></div>
-    <div class="field"><label>Almuerzo</label><span>${almuerzo}</span></div>
-    <div class="field"><label>Hora de salida</label><span>${fmtHora(turno.salida)}</span></div>
-    <div class="field"><label>Horas trabajadas</label><span>${minToHrs(turno.horas_trabajadas)} horas</span></div>
+    <div class="field"><label>Fecha de la prestación</label><span>${fmtFecha(turno.fecha)}</span></div>
+    <div class="field"><label>Hora de inicio</label><span>${fmtHora(turno.entrada)}</span></div>
+    <div class="field"><label>Descanso</label><span>${almuerzo}</span></div>
+    <div class="field"><label>Hora de finalización</label><span>${fmtHora(turno.salida)}</span></div>
+    <div class="field"><label>Horas de servicio prestado</label><span>${minToHrs(turno.horas_trabajadas)} horas</span></div>
     <div class="field"><label>Método de pago</label><span>${turno.metodo_pago||"Efectivo"}</span></div>
   </div>
   <div class="total-box">
-    <div><div class="lbl">TOTAL A PAGAR</div><div class="amt">${COP(turno.pago)}</div><div style="font-size:12px;opacity:.7;margin-top:4px">${minToHrs(turno.horas_trabajadas)} hrs × ${COP(colaborador.valor_hora)}/hr</div></div>
+    <div><div class="lbl">TOTAL A PAGAR</div><div class="amt">${COP(turno.pago)}</div><div style="font-size:12px;opacity:.7;margin-top:4px">${minToHrs(turno.horas_trabajadas)} hrs × ${COP(contratista.valor_hora)}/hr</div></div>
     <div style="text-align:right"><div class="lbl">ESTADO</div><div style="font-size:16px;font-weight:700;margin-top:4px">✓ PAGO REALIZADO</div><div style="font-size:12px;opacity:.7">Firmado digitalmente</div></div>
   </div>
-  <h2>Firma del Colaborador</h2>
+  <h2>Firma del Contratista</h2>
   <div class="firma-box">
-    <div style="font-size:12px;color:#64748b;margin-bottom:10px">El colaborador firma confirmando que recibió el pago a satisfacción:</div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:10px">El contratista firma confirmando que recibió el pago a satisfacción por la prestación de servicio:</div>
     ${firmaHtml}
     <div style="font-size:11px;color:#94a3b8;margin-top:12px;text-align:center">
       <strong style="color:#1a1a2e">Métodos de verificación aplicados:</strong><br/>
-      ✓ Cédula verificada: ${colaborador.cedula || "—"}<br/>
-      ✓ OTP confirmado al celular: ${colaborador.celular ? colaborador.celular.replace(/(\d{3})\d{4}(\d{3})/, "$1****$2") : "—"}<br/>
-      ✓ IP del dispositivo: ${cuenta.ip_firma || "No disponible"}<br/>
+      ✓ Cédula verificada: ${contratista.cedula||"—"}<br/>
+      ✓ OTP confirmado al celular: ${contratista.celular ? contratista.celular.replace(/(\d{3})\d{4}(\d{3})/, "$1****$2") : "—"}<br/>
+      ✓ IP del dispositivo: ${cuenta.ip_firma||"No disponible"}<br/>
       ✓ Firmado el: ${cuenta.firmado_en ? new Date(cuenta.firmado_en).toLocaleString("es-CO", { dateStyle: "full", timeStyle: "short" }) : "—"}<br/>
-      Token de verificación: ${cuenta.token}
+      No. Cuenta: ${cuenta.numero_consecutivo||"—"} · Token: ${cuenta.token}
     </div>
   </div>
-  <div class="footer">Este documento es constancia de pago generada por TurnosPRO.<br/>La firma digital tiene validez como constancia de recibo del pago.<br/>Generado el ${nowStr()}</div>
+  <div class="footer">Este documento es constancia de pago por prestación de servicio generada por el Sistema de Prestación de Servicio.<br/>La firma digital tiene validez como constancia de recibo del pago a satisfacción.<br/>Generado el ${nowStr()}</div>
   <button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar como PDF</button>
   </body></html>`;
 
-  // Usar Blob para evitar bloqueo de base64 en ventanas nuevas
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const win = window.open(url, "_blank");
-  if (win) {
-    win.onload = () => URL.revokeObjectURL(url);
-  } else {
-    // Si el navegador bloquea popups, descargar directamente
+  if (win) { win.onload = () => URL.revokeObjectURL(url); }
+  else {
     const a = document.createElement("a");
     a.href = url;
-    a.download = `cuenta-cobro-${colaborador.nombre.replace(/\s+/g,"-")}-${turno.fecha}.html`;
+    a.download = `cuenta-cobro-${contratista.nombre.replace(/\s+/g,"-")}-${turno.fecha}.html`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 3000);
   }
@@ -281,7 +281,7 @@ const PaginaFirma = ({ token }) => {
       <div style={{textAlign:"center",padding:40}} className="fade">
         <div style={{fontSize:64,marginBottom:16}}>✅</div>
         <div style={{fontWeight:800,fontSize:24,color:G.green}}>¡Firma registrada!</div>
-        <div style={{color:G.muted,marginTop:10,fontSize:14,lineHeight:1.6}}>Tu firma quedó guardada como constancia<br/>de que recibiste el pago a satisfacción.</div>
+        <div style={{color:G.muted,marginTop:10,fontSize:14,lineHeight:1.6}}>Tu firma quedó guardada como constancia<br/>de que recibiste el pago por la prestación de servicio.</div>
         {turno && <div style={{marginTop:20,background:G.card,border:`1px solid ${G.border}`,borderRadius:10,padding:"16px 24px",display:"inline-block"}}>
           <div style={{color:G.gold,fontWeight:800,fontSize:22}}>{COP(turno.pago)}</div>
           <div style={{color:G.muted,fontSize:12,marginTop:4}}>Turno del {fmtFecha(turno?.fecha)}</div>
@@ -301,7 +301,7 @@ const PaginaFirma = ({ token }) => {
 
         {/* Header */}
         <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{fontSize:11,letterSpacing:".2em",color:G.muted,fontFamily:"'JetBrains Mono'",marginBottom:6}}>HUELLAS SANAS · CUENTA DE COBRO</div>
+          <div style={{fontSize:11,letterSpacing:".2em",color:G.muted,fontFamily:"'JetBrains Mono'",marginBottom:6}}>PRESTACIÓN DE SERVICIO · CUENTA DE COBRO</div>
           <div style={{fontSize:22,fontWeight:800}}>{colaborador?.nombre}</div>
           <div style={{color:G.gold,fontWeight:700,fontSize:18,marginTop:4}}>{turno && COP(turno.pago)}</div>
           <div style={{color:G.muted,fontSize:12,marginTop:2}}>Turno del {turno && fmtFecha(turno.fecha)}</div>
@@ -384,7 +384,7 @@ const PaginaFirma = ({ token }) => {
                     </div>
                     <FirmaCanvas onFirma={firmar}/>
                     <div style={{color:G.muted,fontSize:11,marginTop:12,textAlign:"center",lineHeight:1.5}}>
-                      Al firmar confirmas que recibiste {COP(turno.pago)}<br/>correspondiente al turno del {fmtFecha(turno.fecha)}
+                      Al firmar confirmas que recibiste {COP(turno.pago)}<br/>por la prestación de servicio del {fmtFecha(turno.fecha)}
                     </div>
                   </>
               }
@@ -409,7 +409,7 @@ export default function App() {
   const [cuentas, setCuentas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [turnoForm, setTurnoForm] = useState({ colaborador_id:"", fecha:TODAY, entrada:"", salida_almuerzo:"", ingreso_almuerzo:"", salida:"", metodo_pago:"efectivo" });
-  const [colForm, setColForm] = useState({ nombre:"", cedula:"", celular:"", valor_hora:"" });
+  const [colForm, setColForm] = useState({ nombre:"", cedula:"", celular:"", valor_hora:"", perfil:"", area:"", tipo_contrato:"" });
   const [editCol, setEditCol] = useState(null);
   const [editTurno, setEditTurno] = useState(null);
   const [authForm, setAuthForm] = useState({ email:"", password:"" });
@@ -457,7 +457,7 @@ export default function App() {
       const ahora=new Date();
       if(ahora.getHours()===18&&ahora.getMinutes()===0){
         supabase.from("cuentas_cobro").select("*").eq("firmada",false).then(({data})=>{
-          if(data?.length>0) showToast(`⏰ Recordatorio: ${data.length} cuenta(s) de cobro pendiente(s) de firma`,"err");
+          if(data?.length>0) showToast(`⏰ Recordatorio: ${data.length} cuenta(s) de cobro pendiente(s) de firma por prestación de servicio`,"err");
         });
       }
     };
@@ -495,28 +495,30 @@ export default function App() {
 
     if(editTurno) {
       const {error}=await supabase.from("turnos").update({...turnoForm,horas_trabajadas:mins,pago:pagoFinal}).eq("id",editTurno);
-      if(error) return showToast("Error al actualizar turno","err");
+      if(error) return showToast("Error al actualizar prestación de servicio","err");
       if(anticipoPendiente){ await supabase.from("anticipos").update({descontado:true,turno_descuento_id:editTurno}).eq("id",anticipoPendiente.id); loadAnticipos(); }
       setEditTurno(null);
-      showToast(`✓ Turno actualizado · ${minToHrs(mins)} hrs · ${COP(pagoFinal)}`);
+      showToast(`✓ Prestación actualizada · ${minToHrs(mins)} hrs · ${COP(pagoFinal)}`);
     } else {
       const {data:t,error}=await supabase.from("turnos").insert({...turnoForm,horas_trabajadas:mins,pago:pagoFinal,creado_por:session.user.id}).select().single();
-      if(error) return showToast("Error al guardar turno","err");
-      await supabase.from("cuentas_cobro").insert({turno_id:t.id,token:genToken()});
-      await supabase.from("auditoria").insert({user_id:session.user.id,accion:"crear_turno",tabla:"turnos",registro_id:t.id,detalle:{colaborador:col.nombre,pago:pagoFinal}});
-      if(anticipoPendiente){ await supabase.from("anticipos").update({descontado:true,turno_descuento_id:t.id}).eq("id",anticipoPendiente.id); loadAnticipos(); showToast(`✓ Turno guardado · Anticipo de ${COP(anticipoPendiente.monto)} descontado · Neto: ${COP(pagoFinal)}`); }
-      else showToast(`✓ Turno guardado · ${minToHrs(mins)} hrs · ${COP(pagoFinal)}`);
+      if(error) return showToast("Error al guardar prestación de servicio","err");
+      // Generar número consecutivo
+      const {data:consec} = await supabase.rpc("generar_consecutivo");
+      await supabase.from("cuentas_cobro").insert({turno_id:t.id,token:genToken(),numero_consecutivo:consec});
+      await supabase.from("auditoria").insert({user_id:session.user.id,accion:"crear_prestacion",tabla:"turnos",registro_id:t.id,detalle:{contratista:col.nombre,pago:pagoFinal}});
+      if(anticipoPendiente){ await supabase.from("anticipos").update({descontado:true,turno_descuento_id:t.id}).eq("id",anticipoPendiente.id); loadAnticipos(); showToast(`✓ Prestación guardada · Anticipo de ${COP(anticipoPendiente.monto)} descontado · Neto: ${COP(pagoFinal)}`); }
+      else showToast(`✓ Prestación guardada · ${minToHrs(mins)} hrs · ${COP(pagoFinal)}`);
     }
     loadTurnos(); loadCuentas();
     setTurnoForm(f=>({...f,entrada:"",salida_almuerzo:"",ingreso_almuerzo:"",salida:"",metodo_pago:"efectivo"}));
   };
 
   const deleteTurno = async(id)=>{
-    if(!confirm("¿Eliminar este turno? Esta acción no se puede deshacer.")) return;
+    if(!confirm("¿Eliminar esta prestación de servicio? Esta acción no se puede deshacer.")) return;
     await supabase.from("cuentas_cobro").delete().eq("turno_id",id);
     await supabase.from("turnos").delete().eq("id",id);
     loadTurnos(); loadCuentas();
-    showToast("Turno eliminado");
+    showToast("Prestación de servicio eliminada");
   };
 
   const saveAnticipos = async()=>{
@@ -524,7 +526,7 @@ export default function App() {
     await supabase.from("anticipos").insert({ colaborador_id:anticipoForm.colaborador_id, monto:Number(anticipoForm.monto), descripcion:anticipoForm.descripcion, creado_por:session.user.id });
     setAnticipoForm({colaborador_id:"",monto:"",descripcion:""});
     loadAnticipos();
-    showToast("Anticipo registrado — se descontará del próximo turno");
+    showToast("Anticipo registrado — se descontará de la próxima prestación de servicio");
   };
 
   const exportarExcel = ()=>{
@@ -535,12 +537,12 @@ export default function App() {
         const cuenta=cuentas.find(c=>c.turno_id===t.id);
         return [t.fecha, col?.nombre||"—", col?.cedula||"—", fmtHora(t.entrada), t.salida_almuerzo?fmtHora(t.salida_almuerzo):"", t.ingreso_almuerzo?fmtHora(t.ingreso_almuerzo):"", fmtHora(t.salida), minToHrs(t.horas_trabajadas), t.metodo_pago||"efectivo", t.pago, cuenta?.firmada?"Sí":"No"];
       });
-      const header=["Fecha","Colaborador","Cédula","Entrada","Sale Almuerzo","Regresa Almuerzo","Salida","Horas","Método Pago","Total Pago","Firmado"];
+      const header=["Fecha","Contratista","Cédula","Hora Inicio","Sale Descanso","Regresa Descanso","Hora Fin","Horas de Servicio","Método Pago","Total Pago","Firmado"];
       const csvContent = [header,...filas].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
       const blob=new Blob(["\uFEFF"+csvContent],{type:"text/csv;charset=utf-8;"});
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
-      a.href=url; a.download=`huellas-sanas-turnos-${TODAY}.csv`; a.click();
+      a.href=url; a.download=`prestacion-servicio-${TODAY}.csv`; a.click();
       setTimeout(()=>URL.revokeObjectURL(url),3000);
       showToast("✓ Archivo descargado");
     } catch(e){ showToast("Error al exportar","err"); }
@@ -548,14 +550,15 @@ export default function App() {
   };
 
   const saveCol = async()=>{
-    if(!colForm.nombre.trim()||!colForm.valor_hora) return showToast("Nombre y valor por hora son obligatorios","err");
-    const payload={nombre:colForm.nombre.trim(),cedula:colForm.cedula.trim(),celular:colForm.celular.trim(),valor_hora:Number(colForm.valor_hora)};
-    if(editCol){ await supabase.from("colaboradores").update(payload).eq("id",editCol); setEditCol(null); showToast("Colaborador actualizado"); }
-    else { await supabase.from("colaboradores").insert(payload); showToast("Colaborador agregado"); }
-    setColForm({nombre:"",cedula:"",celular:"",valor_hora:""}); loadColaboradores();
+    if(!colForm.nombre.trim()||!colForm.cedula.trim()||!colForm.celular.trim()||!colForm.valor_hora||!colForm.perfil.trim()||!colForm.area.trim()||!colForm.tipo_contrato.trim())
+      return showToast("Todos los campos son obligatorios","err");
+    const payload={nombre:colForm.nombre.trim(),cedula:colForm.cedula.trim(),celular:colForm.celular.trim(),valor_hora:Number(colForm.valor_hora),perfil:colForm.perfil.trim(),area:colForm.area.trim(),tipo_contrato:colForm.tipo_contrato.trim()};
+    if(editCol){ await supabase.from("colaboradores").update(payload).eq("id",editCol); setEditCol(null); showToast("Contratista actualizado"); }
+    else { await supabase.from("colaboradores").insert(payload); showToast("Contratista agregado"); }
+    setColForm({nombre:"",cedula:"",celular:"",valor_hora:"",perfil:"",area:"",tipo_contrato:""}); loadColaboradores();
   };
 
-  const deleteCol = async(id)=>{ await supabase.from("colaboradores").delete().eq("id",id); loadColaboradores(); loadTurnos(); showToast("Colaborador eliminado"); };
+  const deleteCol = async(id)=>{ await supabase.from("colaboradores").delete().eq("id",id); loadColaboradores(); loadTurnos(); showToast("Contratista eliminado"); };
 
   const copiarLink = (turnoId)=>{
     const cuenta=cuentas.find(c=>c.turno_id===turnoId);
@@ -570,7 +573,7 @@ export default function App() {
     const cuenta=cuentas.find(c=>c.turno_id===turnoId);
     if(!cuenta) return showToast("No se encontró la cuenta de cobro","err");
     const link=`${window.location.origin}${window.location.pathname}?token=${cuenta.token}`;
-    const msg=`Hola ${col?.nombre||""}! 👋\n\nTe comparto tu cuenta de cobro de *HuellasSanas* correspondiente al turno del *${fmtFecha(turno.fecha)}*.\n\n💰 Total: *${COP(turno.pago)}*\n⏱ Horas: *${minToHrs(turno.horas_trabajadas)} hrs*\n\nPor favor firma aquí para confirmar que recibiste el pago:\n${link}`;
+    const msg=`Hola ${col?.nombre||""}! 👋\n\nTe comparto tu cuenta de cobro de *Prestación de Servicio* correspondiente a la prestación del *${fmtFecha(turno.fecha)}*.\n\n💰 Total: *${COP(turno.pago)}*\n⏱ Horas de servicio: *${minToHrs(turno.horas_trabajadas)} hrs*\n\nPor favor firma aquí para confirmar que recibiste el pago:\n${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`,"_blank");
   };
 
@@ -587,7 +590,7 @@ export default function App() {
     });
     if(sinFirmar.length>0){
       const nombres=sinFirmar.map(t=>colMap[t.colaborador_id]?.nombre||"—").join(", ");
-      showToast(`⚠️ ${sinFirmar.length} turno(s) sin firmar hace más de 1 hora: ${nombres}`,"err");
+      showToast(`⚠️ ${sinFirmar.length} prestación(es) sin firmar hace más de 1 hora: ${nombres}`,"err");
     }
   },[turnos,cuentas]);
 
@@ -595,12 +598,11 @@ export default function App() {
     setGenerandoPDF(turnoId);
     try {
       const turno=turnos.find(t=>t.id===turnoId);
-      const col=colaboradores.find(c=>c.id===turno.colaborador_id);
-      // Recargar cuenta fresca para tener ip_firma actualizada
+      const contratista=colaboradores.find(c=>c.id===turno.colaborador_id);
       const {data:cuentaFresca}=await supabase.from("cuentas_cobro").select("*").eq("turno_id",turnoId).single();
       let firmaImg=null;
       if(cuentaFresca?.firmada){ const {data:f}=await supabase.from("firmas").select("firma_base64").eq("cuenta_cobro_id",cuentaFresca.id).single(); firmaImg=f?.firma_base64||null; }
-      generarPDF(turno,col,cuentaFresca||cuentas.find(c=>c.turno_id===turnoId),firmaImg);
+      generarPDF(turno,contratista,cuentaFresca||cuentas.find(c=>c.turno_id===turnoId),firmaImg);
     } catch(e){ showToast("Error al generar PDF","err"); }
     setGenerandoPDF(null);
   };
@@ -627,9 +629,9 @@ export default function App() {
       {toast&&<Toast {...toast}/>}
       <div style={{width:"100%",maxWidth:400}} className="fade">
         <div style={{textAlign:"center",marginBottom:32}}>
-          <div style={{fontSize:40,marginBottom:8}}>🌿</div>
-          <div style={{fontSize:28,fontWeight:800,letterSpacing:"-.02em"}}>HuellasSanas</div>
-          <div style={{color:G.muted,fontSize:13,marginTop:4}}>Sistema de control y pago de turnos</div>
+          <div style={{fontSize:40,marginBottom:8}}>📋</div>
+          <div style={{fontSize:28,fontWeight:800,letterSpacing:"-.02em"}}>Prestación de Servicio</div>
+          <div style={{color:G.muted,fontSize:13,marginTop:4}}>Sistema de control y pago de prestaciones de servicio</div>
         </div>
         <div className="card">
           <div style={{display:"flex",gap:8,marginBottom:24}}>
@@ -653,8 +655,8 @@ export default function App() {
   );
 
   const navItems=[
-    {id:"turnos",label:"Turnos",icon:"⏱"},
-    {id:"colaboradores",label:"Colaboradores",icon:"👥"},
+    {id:"turnos",label:"Prestaciones",icon:"⏱"},
+    {id:"colaboradores",label:"Contratistas",icon:"👥"},
     {id:"historial",label:"Historial",icon:"📋"},
     {id:"anticipos",label:"Anticipos",icon:"💸"},
     ...(userRol==="admin"?[{id:"reportes",label:"Reportes",icon:"📊"},{id:"usuarios",label:"Usuarios",icon:"🔐"}]:[]),
@@ -666,8 +668,8 @@ export default function App() {
       {toast&&<Toast {...toast}/>}
       <header style={{background:G.card,borderBottom:`1px solid ${G.border}`,padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontSize:22}}>🌿</span>
-          <div><div style={{fontWeight:800,fontSize:16}}>HuellasSanas</div><div style={{fontSize:10,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".08em"}}>Sistema de control y pago de turnos · {userRol?.toUpperCase()}</div></div>
+          <span style={{fontSize:22}}>📋</span>
+          <div><div style={{fontWeight:800,fontSize:16}}>Prestación de Servicio</div><div style={{fontSize:10,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".08em"}}>Sistema de control y pago · {userRol?.toUpperCase()}</div></div>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {navItems.map(n=>(
@@ -683,17 +685,17 @@ export default function App() {
 
         {view==="turnos"&&(
           <div className="fade">
-            <h2 style={{fontSize:20,fontWeight:700,marginBottom:22}}>Registrar Turno</h2>
+            <h2 style={{fontSize:20,fontWeight:700,marginBottom:22}}>Registrar Prestación de Servicio</h2>
             {colaboradores.length===0?(
               <div className="card" style={{textAlign:"center",padding:48}}>
                 <div style={{fontSize:40,marginBottom:12}}>👥</div>
-                <div style={{color:G.muted}}>Primero agrega colaboradores</div>
-                <button className="btn-primary" style={{marginTop:16}} onClick={()=>setView("colaboradores")}>Ir a Colaboradores →</button>
+                <div style={{color:G.muted}}>Primero agrega contratistas</div>
+                <button className="btn-primary" style={{marginTop:16}} onClick={()=>setView("colaboradores")}>Ir a Contratistas →</button>
               </div>
             ):(
               <div className="card" style={{display:"flex",flexDirection:"column",gap:16}}>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-                  <div><label>Colaborador *</label>
+                  <div><label>Contratista *</label>
                     <select value={turnoForm.colaborador_id} onChange={e=>setTurnoForm(f=>({...f,colaborador_id:e.target.value}))}>
                       <option value="">— Seleccionar —</option>
                       {colaboradores.map(c=><option key={c.id} value={c.id}>{c.nombre} · {COP(c.valor_hora)}/hr</option>)}
@@ -703,14 +705,14 @@ export default function App() {
                 </div>
                 <div style={{height:1,background:G.border}}/>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12}}>
-                  {[["entrada","🟢 Entrada *"],["salida_almuerzo","🍽 Sale almuerzo"],["ingreso_almuerzo","↩ Regresa almuerzo"],["salida","🔴 Salida *"]].map(([k,l])=>(
+                  {[["entrada","🟢 Hora inicio *"],["salida_almuerzo","🍽 Sale descanso"],["ingreso_almuerzo","↩ Regresa descanso"],["salida","🔴 Hora fin *"]].map(([k,l])=>(
                     <div key={k}><label>{l}</label><input type="time" value={turnoForm[k]} onChange={e=>setTurnoForm(f=>({...f,[k]:e.target.value}))}/></div>
                   ))}
                 </div>
                 {previewMins>0&&(
                   <div style={{background:"linear-gradient(135deg,#061a0c,#0c1a30)",border:`1px solid ${G.border}`,borderRadius:10,padding:"14px 20px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <div><div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>HORAS TRABAJADAS</div><div style={{fontSize:24,fontWeight:800,color:G.green}}>{minToHrs(previewMins)} hrs</div></div>
+                      <div><div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>HORAS DE SERVICIO</div><div style={{fontSize:24,fontWeight:800,color:G.green}}>{minToHrs(previewMins)} hrs</div></div>
                       <div style={{textAlign:"right"}}>
                         <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>PAGO {anticipoPendiente?"NETO":"ESTIMADO"}</div>
                         <div style={{fontSize:24,fontWeight:800,color:G.gold}}>{COP(previewPagoFinal)}</div>
@@ -734,14 +736,14 @@ export default function App() {
                   </div>
                 </div>
                 <div style={{display:"flex",gap:8}}>
-                  <button className="btn-primary" style={{flex:1,padding:"13px 0",fontSize:15}} onClick={saveTurno}>{editTurno?"Actualizar Turno →":"Guardar Turno →"}</button>
+                  <button className="btn-primary" style={{flex:1,padding:"13px 0",fontSize:15}} onClick={saveTurno}>{editTurno?"Actualizar Prestación →":"Guardar Prestación →"}</button>
                   {editTurno&&<button className="btn-ghost" style={{padding:"13px 20px"}} onClick={()=>{setEditTurno(null);setTurnoForm({colaborador_id:"",fecha:TODAY,entrada:"",salida_almuerzo:"",ingreso_almuerzo:"",salida:"",metodo_pago:"efectivo"});}}>Cancelar</button>}
                 </div>
               </div>
             )}
             {turnos.length>0&&(
               <div style={{marginTop:28}}>
-                <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".1em",marginBottom:12}}>ÚLTIMOS REGISTROS</div>
+                <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".1em",marginBottom:12}}>ÚLTIMAS PRESTACIONES</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {turnos.slice(0,6).map(t=>{
                     const col=colMap[t.colaborador_id];
@@ -775,18 +777,22 @@ export default function App() {
 
         {view==="colaboradores"&&(
           <div className="fade">
-            <h2 style={{fontSize:20,fontWeight:700,marginBottom:22}}>Colaboradores</h2>
+            <h2 style={{fontSize:20,fontWeight:700,marginBottom:22}}>Contratistas</h2>
             {userRol==="admin"&&(
               <div className="card" style={{marginBottom:20}}>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
                   <div><label>Nombre completo *</label><input placeholder="Nombre completo" value={colForm.nombre} onChange={e=>setColForm(f=>({...f,nombre:e.target.value}))}/></div>
-                  <div><label>Cédula</label><input placeholder="Número de cédula" value={colForm.cedula} onChange={e=>setColForm(f=>({...f,cedula:e.target.value}))}/></div>
-                  <div><label>Celular</label><input placeholder="Número de celular" value={colForm.celular} onChange={e=>setColForm(f=>({...f,celular:e.target.value}))}/></div>
-                  <div><label>Valor / hora (COP) *</label><input type="number" placeholder="Ej: 8000" value={colForm.valor_hora} onChange={e=>setColForm(f=>({...f,valor_hora:e.target.value}))}/></div>
+                  <div><label>Cédula *</label><input placeholder="Número de cédula" value={colForm.cedula} onChange={e=>setColForm(f=>({...f,cedula:e.target.value}))}/></div>
+                  <div><label>Celular *</label><input placeholder="Número de celular" value={colForm.celular} onChange={e=>setColForm(f=>({...f,celular:e.target.value}))}/></div>
+                  <div><label>Valor / hora de servicio (COP) *</label><input type="number" placeholder="Ej: 8000" value={colForm.valor_hora} onChange={e=>setColForm(f=>({...f,valor_hora:e.target.value}))}/></div>
+                  <div><label>Perfil *</label><input placeholder="Ej: Enfermero, Médico, Técnico" value={colForm.perfil} onChange={e=>setColForm(f=>({...f,perfil:e.target.value}))}/></div>
+                  <div><label>Área *</label><input placeholder="Ej: Urgencias, UCI, Consulta" value={colForm.area} onChange={e=>setColForm(f=>({...f,area:e.target.value}))}/></div>
+                  <div style={{gridColumn:"span 2"}}><label>Tipo de contrato *</label><input placeholder="Ej: Prestación de servicios, OPS" value={colForm.tipo_contrato} onChange={e=>setColForm(f=>({...f,tipo_contrato:e.target.value}))}/></div>
                 </div>
+                <div style={{fontSize:11,color:G.muted,marginBottom:12}}>* Todos los campos son obligatorios</div>
                 <div style={{display:"flex",gap:8}}>
-                  <button className="btn-primary" style={{flex:1}} onClick={saveCol}>{editCol?"Actualizar colaborador":"+ Agregar colaborador"}</button>
-                  {editCol&&<button className="btn-ghost" onClick={()=>{setEditCol(null);setColForm({nombre:"",cedula:"",celular:"",valor_hora:""});}}>Cancelar</button>}
+                  <button className="btn-primary" style={{flex:1}} onClick={saveCol}>{editCol?"Actualizar contratista":"+ Agregar contratista"}</button>
+                  {editCol&&<button className="btn-ghost" onClick={()=>{setEditCol(null);setColForm({nombre:"",cedula:"",celular:"",valor_hora:"",perfil:"",area:"",tipo_contrato:""});}}>Cancelar</button>}
                 </div>
               </div>
             )}
@@ -804,11 +810,16 @@ export default function App() {
                         {c.celular&&<div style={{color:G.muted,fontSize:12}}>📱 {c.celular}</div>}
                         <div style={{color:G.gold,fontSize:12}}>{COP(c.valor_hora)}/hr</div>
                       </div>
-                      <div style={{color:G.muted,fontSize:11,marginTop:4}}>{tc.length} turnos · {minToHrs(totalHrs)} hrs · {COP(totalPago)} acumulado</div>
+                      <div style={{display:"flex",gap:10,marginTop:4,flexWrap:"wrap"}}>
+                        {c.perfil&&<span className="pill pill-blue">{c.perfil}</span>}
+                        {c.area&&<span className="pill pill-green">{c.area}</span>}
+                        {c.tipo_contrato&&<span style={{fontSize:11,color:G.muted}}>{c.tipo_contrato}</span>}
+                      </div>
+                      <div style={{color:G.muted,fontSize:11,marginTop:4}}>{tc.length} prestaciones · {minToHrs(totalHrs)} hrs · {COP(totalPago)} acumulado</div>
                     </div>
                     {userRol==="admin"&&(
                       <div style={{display:"flex",gap:8}}>
-                        <button className="btn-ghost" onClick={()=>{setEditCol(c.id);setColForm({nombre:c.nombre,cedula:c.cedula||"",celular:c.celular||"",valor_hora:c.valor_hora});}}>Editar</button>
+                        <button className="btn-ghost" onClick={()=>{setEditCol(c.id);setColForm({nombre:c.nombre,cedula:c.cedula||"",celular:c.celular||"",valor_hora:c.valor_hora,perfil:c.perfil||"",area:c.area||"",tipo_contrato:c.tipo_contrato||""});}}>Editar</button>
                         <button className="btn-danger" onClick={()=>deleteCol(c.id)}>Eliminar</button>
                       </div>
                     )}
@@ -824,7 +835,7 @@ export default function App() {
           <div className="fade">
             <div style={{marginBottom:22}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                <h2 style={{fontSize:20,fontWeight:700}}>Historial de Turnos</h2>
+                <h2 style={{fontSize:20,fontWeight:700}}>Historial de Prestaciones</h2>
                 <button onClick={exportarExcel} disabled={exportandoExcel} style={{background:"#052e16",border:`1px solid ${G.green}`,color:G.green,padding:"8px 14px",fontSize:12,borderRadius:8,fontWeight:600}}>
                   {exportandoExcel?"...":"📥 Exportar CSV"}
                 </button>
@@ -845,7 +856,7 @@ export default function App() {
             </div>
             {turnosFiltrados.length>0&&(
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:20}}>
-                {[["Turnos",turnosFiltrados.length,G.accent],["Horas",`${minToHrs(turnosFiltrados.reduce((s,t)=>s+t.horas_trabajadas,0))}`,G.green],["Total",COP(turnosFiltrados.reduce((s,t)=>s+t.pago,0)),G.gold]].map(([l,v,color])=>(
+                {[["Prestaciones",turnosFiltrados.length,G.accent],["Horas de Servicio",`${minToHrs(turnosFiltrados.reduce((s,t)=>s+t.horas_trabajadas,0))}`,G.green],["Total",COP(turnosFiltrados.reduce((s,t)=>s+t.pago,0)),G.gold]].map(([l,v,color])=>(
                   <div key={l} className="card" style={{textAlign:"center"}}>
                     <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>{l}</div>
                     <div style={{fontSize:22,fontWeight:800,color,marginTop:4}}>{v}</div>
@@ -862,8 +873,9 @@ export default function App() {
                     <div style={{flex:1,minWidth:140}}>
                       <div style={{fontWeight:600,fontSize:13}}>{col?.nombre||"—"}</div>
                       <div style={{color:G.muted,fontSize:11,marginTop:2}}>{fmtFecha(t.fecha)} · 🟢{fmtHora(t.entrada)} 🔴{fmtHora(t.salida)}</div>
+                      {cuenta?.numero_consecutivo&&<div style={{color:G.accent,fontSize:10,fontFamily:"'JetBrains Mono'",marginTop:2}}>No. {cuenta.numero_consecutivo}</div>}
                     </div>
-                    <span className="pill pill-green">{minToHrs(t.horas_trabajadas)}h</span>
+                    <span className="pill pill-green">{minToHrs(t.horas_trabajadas)}h servicio</span>
                     <div style={{fontWeight:700,color:G.gold,fontSize:14,minWidth:90,textAlign:"right"}}>{COP(t.pago)}</div>
                     <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>{METODOS.find(m=>m.v===t.metodo_pago)?.l||"💵 Efectivo"}</span>
@@ -897,7 +909,7 @@ export default function App() {
 
             {/* Totales generales */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:24}}>
-              {[["Total colaboradores",colaboradores.length,"👥",G.accent],["Total turnos",turnos.length,"⏱",G.green],["Horas totales",`${minToHrs(turnos.reduce((s,t)=>s+t.horas_trabajadas,0))}`,"🕐",G.gold],["Total pagado",COP(turnos.reduce((s,t)=>s+t.pago,0)),"💰",G.green]].map(([l,v,icon,color])=>(
+              {[["Total contratistas",colaboradores.length,"👥",G.accent],["Total prestaciones",turnos.length,"⏱",G.green],["Horas de servicio",`${minToHrs(turnos.reduce((s,t)=>s+t.horas_trabajadas,0))}`,"🕐",G.gold],["Total pagado",COP(turnos.reduce((s,t)=>s+t.pago,0)),"💰",G.green]].map(([l,v,icon,color])=>(
                 <div key={l} className="card" style={{display:"flex",alignItems:"center",gap:14}}>
                   <div style={{fontSize:28}}>{icon}</div>
                   <div><div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'"}}>{l.toUpperCase()}</div><div style={{fontSize:22,fontWeight:800,color}}>{v}</div></div>
@@ -909,16 +921,16 @@ export default function App() {
             <div style={{background:"#0c1a30",border:`1px solid #1e3a6e`,borderRadius:12,padding:"18px 20px",marginBottom:24}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                 <div>
-                  <div style={{fontWeight:700,fontSize:15,color:G.text}}>📅 Reporte Semanal</div>
+                  <div style={{fontWeight:700,fontSize:15,color:G.text}}>📅 Reporte Semanal de Prestaciones</div>
                   <div style={{fontSize:12,color:G.muted,marginTop:2}}>{fmtSemana(lunes)} — {fmtSemana(domingo)}</div>
                 </div>
                 <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:11,color:G.muted}}>TURNOS ESTA SEMANA</div>
+                  <div style={{fontSize:11,color:G.muted}}>PRESTACIONES ESTA SEMANA</div>
                   <div style={{fontSize:22,fontWeight:800,color:G.accent}}>{turnosSemana.length}</div>
                 </div>
               </div>
               {turnosSemana.length===0
-                ? <div style={{textAlign:"center",padding:20,color:G.muted,fontSize:13}}>No hay turnos registrados esta semana</div>
+                ? <div style={{textAlign:"center",padding:20,color:G.muted,fontSize:13}}>No hay prestaciones registradas esta semana</div>
                 : <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {colaboradores.map(c=>{
                       const tc=turnosSemana.filter(t=>t.colaborador_id===c.id);
@@ -948,7 +960,7 @@ export default function App() {
             </div>
 
             {/* Por colaborador acumulado */}
-            <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".1em",marginBottom:12}}>ACUMULADO TOTAL POR COLABORADOR</div>
+            <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".1em",marginBottom:12}}>ACUMULADO TOTAL POR CONTRATISTA</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {colaboradores.map(c=>{
                 const tc=turnos.filter(t=>t.colaborador_id===c.id);
@@ -980,7 +992,7 @@ export default function App() {
               <div className="card" style={{marginBottom:20}}>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>Registrar anticipo</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
-                  <div><label>Colaborador</label>
+                  <div><label>Contratista</label>
                     <select value={anticipoForm.colaborador_id} onChange={e=>setAnticipoForm(f=>({...f,colaborador_id:e.target.value}))}>
                       <option value="">— Seleccionar —</option>
                       {colaboradores.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -990,7 +1002,7 @@ export default function App() {
                   <div><label>Descripción</label><input placeholder="Ej: Préstamo personal" value={anticipoForm.descripcion} onChange={e=>setAnticipoForm(f=>({...f,descripcion:e.target.value}))}/></div>
                 </div>
                 <button className="btn-primary" onClick={saveAnticipos}>+ Registrar anticipo</button>
-                <div style={{fontSize:12,color:G.muted,marginTop:10}}>⚠️ El anticipo se descontará automáticamente del próximo turno del colaborador</div>
+                <div style={{fontSize:12,color:G.muted,marginTop:10}}>⚠️ El anticipo se descontará automáticamente de la próxima prestación de servicio del contratista</div>
               </div>
             )}
 
