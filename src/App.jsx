@@ -281,7 +281,12 @@ export default function App() {
     return ()=>subscription.unsubscribe();
   },[]);
 
-  const loadRol = async(uid)=>{ const {data}=await supabase.from("user_roles").select("rol").eq("user_id",uid).single(); setUserRol(data?.rol||"admin"); setLoading(false); };
+  const loadRol = async(uid)=>{
+    const {data,error}=await supabase.from("user_roles").select("rol").eq("user_id",uid).maybeSingle();
+    if(error) console.error("loadRol error:",error);
+    setUserRol(data?.rol||"admin");
+    setLoading(false);
+  };
 
   useEffect(()=>{
     if(!session) return;
@@ -299,7 +304,7 @@ export default function App() {
   const loadColaboradores = async()=>{ const {data}=await supabase.from("colaboradores").select("*").order("nombre"); setColaboradores(data||[]); };
   const loadTurnos = async()=>{ const {data}=await supabase.from("turnos").select("*").order("fecha",{ascending:false}); setTurnos(data||[]); };
   const loadCuentas = async()=>{ const {data}=await supabase.from("cuentas_cobro").select("*"); setCuentas(data||[]); };
-  const loadUsuarios = async()=>{ const {data}=await supabase.from("user_roles").select("*, auth_email:user_id(email)").order("created_at"); setUsuarios(data||[]); };
+  const loadUsuarios = async()=>{ const {data}=await supabase.from("user_roles").select("*").order("created_at"); setUsuarios(data||[]); };
 
   const handleLogin = async()=>{ setLoading(true); const {error}=await supabase.auth.signInWithPassword({email:authForm.email,password:authForm.password}); if(error){showToast(error.message,"err");setLoading(false);} };
   const handleRegister = async()=>{
