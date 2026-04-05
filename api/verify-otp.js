@@ -1,5 +1,3 @@
-const { createClient } = require('@supabase/supabase-js');
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -7,28 +5,37 @@ export default async function handler(req, res) {
   if (!celular || !otp) return res.status(400).json({ error: 'Datos incompletos' });
 
   try {
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
     const celularLimpio = celular.replace(/\D/g, '');
     const otpHash = Buffer.from(otp).toString('base64');
 
-    // Buscar OTP válido
-    const { data, error } = await supabase
-      .from('otp_verificaciones')
-      .select('*')
-      .eq('celular', celularLimpio)
-      .eq('otp_hash', otpHash)
-      .eq('usado', false)
-      .gt('expira_en', new Date().toISOString())
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    const supabaseRes = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/otp_verificaciones?celular=eq.${celularLimpio}&otp_hash=eq.${otpHash}&usado=eq.false&expira_en=gt.${new Date().toISOString()}&order=created_at.desc&limit=1`,
+      {
+        headers: {
+          'apikey': process.env.SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`
+        }
+      }
+    );
 
-    if (error || !data) return res.status(400).json({ error: 'Código inválido o expirado' });
+    const data = await supabaseRes.json();
+    if (!data?.length) return res.status(400).json({ error: 'Código inválido o expirado' });
 
     // Marcar como usado
-    await supabase.from('otp_verificaciones').update({ usado: true }).eq('id', data.id);
+    await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/otp_verificaciones?id=eq.${data[0].id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': process.env.SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ usado: true })
+      }
+    );
 
-    res.status(200).json({ ok: true, celular: celularLimpio });
+    res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al verificar código' });
