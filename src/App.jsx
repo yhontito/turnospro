@@ -267,6 +267,8 @@ export default function App() {
   const [authForm, setAuthForm] = useState({ email:"", password:"" });
   const [filterCol, setFilterCol] = useState("");
   const [generandoPDF, setGenerandoPDF] = useState(null);
+  const [nuevoUsuario, setNuevoUsuario] = useState({ email:"", password:"", rol:"supervisor" });
+  const [creandoUsuario, setCreandoUsuario] = useState(false);
 
   const urlToken = new URLSearchParams(window.location.search).get("token");
   if (urlToken) return <><style>{css}</style><PaginaFirma token={urlToken} /></>;
@@ -297,7 +299,7 @@ export default function App() {
   const loadColaboradores = async()=>{ const {data}=await supabase.from("colaboradores").select("*").order("nombre"); setColaboradores(data||[]); };
   const loadTurnos = async()=>{ const {data}=await supabase.from("turnos").select("*").order("fecha",{ascending:false}); setTurnos(data||[]); };
   const loadCuentas = async()=>{ const {data}=await supabase.from("cuentas_cobro").select("*"); setCuentas(data||[]); };
-  const loadUsuarios = async()=>{ const {data}=await supabase.from("user_roles").select("*"); setUsuarios(data||[]); };
+  const loadUsuarios = async()=>{ const {data}=await supabase.from("user_roles").select("*, auth_email:user_id(email)").order("created_at"); setUsuarios(data||[]); };
 
   const handleLogin = async()=>{ setLoading(true); const {error}=await supabase.auth.signInWithPassword({email:authForm.email,password:authForm.password}); if(error){showToast(error.message,"err");setLoading(false);} };
   const handleRegister = async()=>{
@@ -615,19 +617,69 @@ export default function App() {
         {view==="usuarios"&&userRol==="admin"&&(
           <div className="fade">
             <h2 style={{fontSize:20,fontWeight:700,marginBottom:22}}>Gestión de Usuarios</h2>
-            <div className="card" style={{marginBottom:20,background:"#0c1a0c",border:"1px solid #1a3a1a"}}>
-              <div style={{fontSize:13,color:G.muted,lineHeight:1.7}}>
-                Para crear supervisores ve a <strong style={{color:G.text}}>Supabase → Authentication → Users → Add user</strong>, crea el usuario, luego en <strong style={{color:G.text}}>Table Editor → user_roles</strong> agrega una fila con el <code style={{background:G.surface,padding:"1px 6px",borderRadius:4}}>user_id</code> y rol <code style={{background:G.surface,padding:"1px 6px",borderRadius:4}}>supervisor</code>.
+
+            {/* Formulario crear usuario */}
+            <div className="card" style={{marginBottom:20}}>
+              <div style={{fontSize:14,fontWeight:600,marginBottom:16,color:G.text}}>➕ Crear nuevo usuario</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
+                <div><label>Email</label><input type="email" placeholder="correo@empresa.com" value={nuevoUsuario.email} onChange={e=>setNuevoUsuario(f=>({...f,email:e.target.value}))}/></div>
+                <div><label>Contraseña</label><input type="password" placeholder="Mínimo 6 caracteres" value={nuevoUsuario.password} onChange={e=>setNuevoUsuario(f=>({...f,password:e.target.value}))}/></div>
+                <div><label>Rol</label>
+                  <select value={nuevoUsuario.rol} onChange={e=>setNuevoUsuario(f=>({...f,rol:e.target.value}))}>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="admin">Administrador</option>
+                  </select>
+                </div>
               </div>
+              <button className="btn-primary" disabled={creandoUsuario} onClick={async()=>{
+                if(!nuevoUsuario.email||!nuevoUsuario.password) return showToast("Completa todos los campos","err");
+                if(nuevoUsuario.password.length<6) return showToast("La contraseña debe tener al menos 6 caracteres","err");
+                setCreandoUsuario(true);
+                try {
+                  const {data,error} = await supabase.rpc("create_user",{
+                    user_email: nuevoUsuario.email,
+                    user_password: nuevoUsuario.password,
+                    user_rol: nuevoUsuario.rol
+                  });
+                  if(error) throw error;
+                  showToast(`✓ Usuario ${nuevoUsuario.email} creado como ${nuevoUsuario.rol}`);
+                  setNuevoUsuario({email:"",password:"",rol:"supervisor"});
+                  loadUsuarios();
+                } catch(e) {
+                  showToast(e.message||"Error al crear usuario","err");
+                }
+                setCreandoUsuario(false);
+              }}>
+                {creandoUsuario ? "Creando..." : "Crear usuario →"}
+              </button>
             </div>
+
+            {/* Lista de usuarios */}
+            <div style={{fontSize:11,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".1em",marginBottom:12}}>USUARIOS REGISTRADOS</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {usuarios.map(u=>(
-                <div key={u.id} className="card" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div style={{fontFamily:"'JetBrains Mono'",fontSize:12,color:G.muted}}>{u.user_id}</div>
-                  <span className={`pill ${u.rol==="admin"?"pill-gold":"pill-blue"}`}>{u.rol}</span>
+                <div key={u.id} className="card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px"}}>
+                  <div>
+                    <div style={{fontWeight:600,fontSize:14}}>{u.email||u.user_id.substring(0,20)+"..."}</div>
+                    <div style={{fontSize:11,color:G.muted,marginTop:3,fontFamily:"'JetBrains Mono'"}}>ID: {u.user_id.substring(0,16)}...</div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span className={`pill ${u.rol==="admin"?"pill-gold":"pill-blue"}`}>{u.rol}</span>
+                    {u.user_id !== session?.user?.id && (
+                      <button className="btn-danger" onClick={async()=>{
+                        if(!confirm("¿Eliminar este usuario?")) return;
+                        await supabase.from("user_roles").delete().eq("user_id",u.user_id);
+                        showToast("Usuario eliminado");
+                        loadUsuarios();
+                      }}>Eliminar</button>
+                    )}
+                    {u.user_id === session?.user?.id && (
+                      <span style={{fontSize:11,color:G.muted}}>(tú)</span>
+                    )}
+                  </div>
                 </div>
               ))}
-              {usuarios.length===0&&<div style={{textAlign:"center",padding:40,color:G.muted}}>No hay usuarios</div>}
+              {usuarios.length===0&&<div style={{textAlign:"center",padding:40,color:G.muted}}>No hay usuarios registrados</div>}
             </div>
           </div>
         )}
