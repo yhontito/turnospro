@@ -1231,12 +1231,13 @@ export default function App() {
                 if(nuevoUsuario.password.length<6) return showToast("La contraseña debe tener al menos 6 caracteres","err");
                 setCreandoUsuario(true);
                 try {
-                  const {data,error} = await supabase.rpc("create_user",{
-                    user_email: nuevoUsuario.email,
-                    user_password: nuevoUsuario.password,
-                    user_rol: nuevoUsuario.rol
-                  });
-                  if(error) throw error;
+                const res = await fetch("/api/create-user", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: nuevoUsuario.email, password: nuevoUsuario.password, rol: nuevoUsuario.rol })
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || "Error al crear usuario");
                   showToast(`✓ Usuario ${nuevoUsuario.email} creado como ${nuevoUsuario.rol}`);
                   setNuevoUsuario({email:"",password:"",rol:"supervisor"});
                   loadUsuarios();
