@@ -65,7 +65,7 @@ const FirmaCanvas = ({ onFirma }) => {
   const ref = useRef(null);
   const drawing = useRef(false);
   const hasDrawn = useRef(false);
-  const points = useRef([]);
+  const currentPoints = useRef([]);
   const lastVel = useRef(0);
 
   useEffect(() => {
@@ -76,9 +76,6 @@ const FirmaCanvas = ({ onFirma }) => {
     c.height = 200 * scale;
     const ctx = c.getContext("2d");
     ctx.scale(scale, scale);
-    ctx.strokeStyle = "#1d4ed8";
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
   }, []);
 
   const getPos = (e, c) => {
@@ -87,34 +84,13 @@ const FirmaCanvas = ({ onFirma }) => {
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
-  const drawSmooth = (ctx, pts) => {
-    if (pts.length < 3) return;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length - 2; i++) {
-      const mx = (pts[i].x + pts[i+1].x) / 2;
-      const my = (pts[i].y + pts[i+1].y) / 2;
-      // Calcular velocidad para simular presión
-      const dx = pts[i].x - pts[i-1].x;
-      const dy = pts[i].y - pts[i-1].y;
-      const vel = Math.sqrt(dx*dx + dy*dy);
-      const smoothVel = vel * 0.3 + lastVel.current * 0.7;
-      lastVel.current = smoothVel;
-      // Grosor varía entre 1.2 y 3.5 según velocidad
-      const width = Math.max(1.2, Math.min(3.5, 3.5 - smoothVel * 0.08));
-      ctx.lineWidth = width;
-      ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
-    }
-    ctx.stroke();
-  };
-
   const clear = () => {
     const c = ref.current;
     const scale = window.devicePixelRatio || 2;
     const ctx = c.getContext("2d");
     ctx.clearRect(0, 0, c.width / scale, c.height / scale);
     hasDrawn.current = false;
-    points.current = [];
+    currentPoints.current = [];
     lastVel.current = 0;
   };
 
@@ -122,13 +98,10 @@ const FirmaCanvas = ({ onFirma }) => {
     e.preventDefault();
     drawing.current = true;
     hasDrawn.current = true;
-    const c = ref.current;
-    const p = getPos(e, c);
-    points.current = [p];
+    currentPoints.current = [];
     lastVel.current = 0;
-    const ctx = c.getContext("2d");
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
+    const p = getPos(e, ref.current);
+    currentPoints.current.push(p);
   };
 
   const draw = (e) => {
@@ -137,21 +110,44 @@ const FirmaCanvas = ({ onFirma }) => {
     const c = ref.current;
     const ctx = c.getContext("2d");
     const p = getPos(e, c);
-    points.current.push(p);
-    ctx.clearRect(0, 0, c.width, c.height);
+    const pts = currentPoints.current;
+    pts.push(p);
+    if (pts.length < 2) return;
+
+    const prev = pts[pts.length - 2];
+    const dx = p.x - prev.x;
+    const dy = p.y - prev.y;
+    const vel = Math.sqrt(dx * dx + dy * dy);
+    const smoothVel = vel * 0.3 + lastVel.current * 0.7;
+    lastVel.current = smoothVel;
+    const width = Math.max(1.2, Math.min(3.5, 3.5 - smoothVel * 0.08));
+
     ctx.strokeStyle = "#1d4ed8";
+    ctx.lineWidth = width;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    drawSmooth(ctx, points.current);
+
+    if (pts.length === 2) {
+      ctx.beginPath();
+      ctx.moveTo(prev.x, prev.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    } else {
+      const before = pts[pts.length - 3];
+      const midPrev = { x: (before.x + prev.x) / 2, y: (before.y + prev.y) / 2 };
+      const midCurr = { x: (prev.x + p.x) / 2, y: (prev.y + p.y) / 2 };
+      ctx.beginPath();
+      ctx.moveTo(midPrev.x, midPrev.y);
+      ctx.quadraticCurveTo(prev.x, prev.y, midCurr.x, midCurr.y);
+      ctx.stroke();
+    }
   };
 
-  const stop = () => { drawing.current = false; };
+  const stop = () => { drawing.current = false; currentPoints.current = []; };
 
   const save = () => {
     if (!hasDrawn.current) { alert("Por favor dibuja tu firma antes de confirmar"); return; }
-    // Exportar a alta resolución
-    const c = ref.current;
-    onFirma(c.toDataURL("image/png", 1.0));
+    onFirma(ref.current.toDataURL("image/png", 1.0));
   };
 
   return (
@@ -197,7 +193,7 @@ const generarPDF = (turno, contratista, cuenta, firmaImg) => {
     @media print{.print-btn{display:none!important}}
   </style></head><body>
   <div class="header">
-    <div><div class="logo">Prestación<span> de Servicio</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de prestaciones de servicio</div></div>
+    <div><div class="logo">Huellas<span> Sanas</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de prestaciones de servicio</div></div>
     <div class="doc-info"><strong>CUENTA DE COBRO</strong>No. ${cuenta.numero_consecutivo||cuenta.token.substring(0,8).toUpperCase()}<br/>Fecha: ${fmtFecha(TODAY)}<br/><br/><span class="badge">✓ FIRMADA</span></div>
   </div>
   <h2>Datos del Contratista</h2>
