@@ -158,7 +158,7 @@ const generarPDF = (turno, contratista, cuenta, firmaImg) => {
       No. Cuenta: ${cuenta.numero_consecutivo||"—"} · Token: ${cuenta.token}
     </div>
   </div>
-  <div class="footer">Este documento es constancia de pago por prestación de servicio generada por el Sistema de Prestación de Servicio.<br/>La firma digital tiene validez como constancia de recibo del pago a satisfacción.<br/>Generado el ${nowStr()}</div>
+  <div class="footer">Este documento es constancia de pago por prestación de servicio.<br/>La firma digital tiene validez como constancia de recibo del pago a satisfacción.<br/>Generado el ${nowStr()}</div>
   <button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar como PDF</button>
   </body></html>`;
 
@@ -629,8 +629,8 @@ export default function App() {
       {toast&&<Toast {...toast}/>}
       <div style={{width:"100%",maxWidth:400}} className="fade">
         <div style={{textAlign:"center",marginBottom:32}}>
-          <div style={{fontSize:40,marginBottom:8}}>📋</div>
-          <div style={{fontSize:28,fontWeight:800,letterSpacing:"-.02em"}}>Prestación de Servicio</div>
+          <div style={{fontSize:40,marginBottom:8}}>🌿</div>
+          <div style={{fontSize:28,fontWeight:800,letterSpacing:"-.02em"}}>HuellasSanas</div>
           <div style={{color:G.muted,fontSize:13,marginTop:4}}>Sistema de control y pago de prestaciones de servicio</div>
         </div>
         <div className="card">
@@ -668,8 +668,8 @@ export default function App() {
       {toast&&<Toast {...toast}/>}
       <header style={{background:G.card,borderBottom:`1px solid ${G.border}`,padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontSize:22}}>📋</span>
-          <div><div style={{fontWeight:800,fontSize:16}}>Prestación de Servicio</div><div style={{fontSize:10,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".08em"}}>Sistema de control y pago · {userRol?.toUpperCase()}</div></div>
+          <span style={{fontSize:22}}>🌿</span>
+          <div><div style={{fontWeight:800,fontSize:16}}>HuellasSanas</div><div style={{fontSize:10,color:G.muted,fontFamily:"'JetBrains Mono'",letterSpacing:".08em"}}>Sistema de control y pago de prestaciones · {userRol?.toUpperCase()}</div></div>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {navItems.map(n=>(
