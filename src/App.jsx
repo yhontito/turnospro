@@ -116,7 +116,7 @@ const generarPDF = (turno, contratista, cuenta, firmaImg) => {
     .badge{display:inline-block;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:99px;padding:3px 12px;font-size:11px;font-weight:600}
     .footer{border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#94a3b8;text-align:center;line-height:1.6}
     .print-btn{display:block;margin:24px auto 0;background:#1d4ed8;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
-    @media print{.print-btn{display:none!important}}
+    @media print{.print-btn{display:none!important} @page{margin:1cm} footer,header{display:none!important}}
   </style></head><body>
   <div class="header">
     <div><div class="logo">HUELLAS<span> SANAS</span></div><div style="font-size:12px;color:#64748b;margin-top:4px">Sistema de control y pago de prestaciones de servicio</div></div>
