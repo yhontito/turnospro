@@ -147,7 +147,11 @@ const generarPDF = (turno, colaborador, cuenta, firmaImg) => {
     <div style="font-size:12px;color:#64748b;margin-bottom:10px">El colaborador firma confirmando que recibió el pago a satisfacción:</div>
     ${firmaHtml}
     <div style="font-size:11px;color:#94a3b8;margin-top:12px;text-align:center">
-      Firmado el ${cuenta.firmado_en ? new Date(cuenta.firmado_en).toLocaleString("es-CO", { dateStyle: "full", timeStyle: "short" }) : "—"}<br/>
+      <strong style="color:#1a1a2e">Métodos de verificación aplicados:</strong><br/>
+      ✓ Cédula verificada: ${colaborador.cedula || "—"}<br/>
+      ✓ OTP confirmado al celular: ${colaborador.celular ? colaborador.celular.replace(/(\d{3})\d{4}(\d{3})/, "$1****$2") : "—"}<br/>
+      ✓ IP del dispositivo: ${cuenta.ip_firma || "No disponible"}<br/>
+      ✓ Firmado el: ${cuenta.firmado_en ? new Date(cuenta.firmado_en).toLocaleString("es-CO", { dateStyle: "full", timeStyle: "short" }) : "—"}<br/>
       Token de verificación: ${cuenta.token}
     </div>
   </div>
@@ -173,11 +177,15 @@ const generarPDF = (turno, colaborador, cuenta, firmaImg) => {
 
 // ── Página Pública de Firma ──
 const PaginaFirma = ({ token }) => {
-  const [estado, setEstado] = useState("cargando");
+  const [estado, setEstado] = useState("cargando"); // cargando | cedula | otp | firma | firmando | firmado_ok | ya_firmado | no_encontrado
   const [cuenta, setCuenta] = useState(null);
   const [turno, setTurno] = useState(null);
   const [colaborador, setColaborador] = useState(null);
-  const [firmando, setFirmando] = useState(false);
+  const [cedulaInput, setCedulaInput] = useState("");
+  const [otpInput, setOtpInput] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [enviandoOTP, setEnviandoOTP] = useState(false);
+  const [celularVerificado, setCelularVerificado] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -186,28 +194,88 @@ const PaginaFirma = ({ token }) => {
       if (c.firmada) return setEstado("ya_firmado");
       const { data: t } = await supabase.from("turnos").select("*").eq("id", c.turno_id).single();
       const { data: col } = await supabase.from("colaboradores").select("*").eq("id", t.colaborador_id).single();
-      setCuenta(c); setTurno(t); setColaborador(col); setEstado("ok");
+      setCuenta(c); setTurno(t); setColaborador(col); setEstado("cedula");
     })();
   }, [token]);
 
-  const firmar = async (img) => {
-    setFirmando(true);
+  // Paso 1: verificar cédula
+  const verificarCedula = () => {
+    setErrorMsg("");
+    if (!cedulaInput.trim()) return setErrorMsg("Ingresa tu número de cédula");
+    const cedulaRegistrada = colaborador.cedula?.replace(/\D/g, "");
+    const cedulaIngresada = cedulaInput.replace(/\D/g, "");
+    if (cedulaIngresada !== cedulaRegistrada) return setErrorMsg("La cédula no coincide con la registrada");
+    if (!colaborador.celular) return setErrorMsg("No hay número de celular registrado. Contacta a tu empleador.");
+    enviarOTP();
+  };
+
+  // Paso 2: enviar OTP
+  const enviarOTP = async () => {
+    setEnviandoOTP(true);
+    setErrorMsg("");
     try {
-      const { error: e1 } = await supabase.from("firmas").insert({ cuenta_cobro_id: cuenta.id, firma_base64: img });
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ celular: colaborador.celular })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al enviar SMS");
+      setCelularVerificado(colaborador.celular);
+      setEstado("otp");
+    } catch (e) {
+      setErrorMsg(e.message);
+    }
+    setEnviandoOTP(false);
+  };
+
+  // Paso 3: verificar OTP
+  const verificarOTP = async () => {
+    setErrorMsg("");
+    if (!otpInput.trim() || otpInput.length !== 6) return setErrorMsg("Ingresa el código de 6 dígitos");
+    try {
+      const res = await fetch("/api/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ celular: colaborador.celular, otp: otpInput })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Código inválido");
+      setEstado("firma");
+    } catch (e) {
+      setErrorMsg(e.message);
+    }
+  };
+
+  // Paso 4: guardar firma
+  const firmar = async (img) => {
+    setEstado("firmando");
+    try {
+      let ip = "No disponible";
+      try { const r = await fetch("https://api.ipify.org?format=json"); const d = await r.json(); ip = d.ip || "No disponible"; } catch {}
+      const { error: e1 } = await supabase.from("firmas").insert({ cuenta_cobro_id: cuenta.id, firma_base64: img, ip });
       if (e1) throw e1;
-      const { error: e2 } = await supabase.from("cuentas_cobro").update({ firmada: true, firmado_en: new Date().toISOString() }).eq("id", cuenta.id);
+      const { error: e2 } = await supabase.from("cuentas_cobro").update({
+        firmada: true, firmado_en: new Date().toISOString(), ip_firma: ip
+      }).eq("id", cuenta.id);
       if (e2) throw e2;
       setEstado("firmado_ok");
     } catch (err) {
       console.error(err);
-      setFirmando(false);
+      setEstado("firma");
       alert("Error al guardar la firma. Intenta de nuevo.");
     }
   };
 
-  if (estado === "cargando") return <div style={{ minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16 }}><style>{css}</style><Spinner /><div style={{color:G.muted,fontSize:13}}>Cargando...</div></div>;
+  // Celular enmascarado para mostrar
+  const celularMask = colaborador?.celular
+    ? colaborador.celular.replace(/(\d{3})\d{4}(\d{3})/, "$1****$2")
+    : "";
+
+  if (estado === "cargando") return <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><style>{css}</style><Spinner /><div style={{color:G.muted,fontSize:13}}>Cargando...</div></div>;
   if (estado === "no_encontrado") return <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><style>{css}</style><div style={{textAlign:"center",padding:40}}><div style={{fontSize:48}}>❌</div><div style={{color:G.muted,marginTop:12}}>Cuenta de cobro no encontrada</div></div></div>;
-  if (estado === "ya_firmado" || estado === "firmado_ok") return (
+  if (estado === "ya_firmado") return <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><style>{css}</style><div style={{textAlign:"center",padding:40}} className="fade"><div style={{fontSize:64,marginBottom:16}}>✅</div><div style={{fontWeight:800,fontSize:24,color:G.green}}>Ya firmaste este comprobante</div><div style={{color:G.muted,marginTop:10,fontSize:14}}>Esta cuenta de cobro ya fue firmada anteriormente.</div></div></div>;
+  if (estado === "firmado_ok") return (
     <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <style>{css}</style>
       <div style={{textAlign:"center",padding:40}} className="fade">
@@ -222,44 +290,107 @@ const PaginaFirma = ({ token }) => {
     </div>
   );
 
+  // Pasos de verificación y firma
+  const pasos = ["cedula","otp","firma","firmando"];
+  const pasoActual = pasos.indexOf(estado)+1;
+
   return (
     <div style={{minHeight:"100vh",background:G.bg,padding:"28px 16px"}}>
       <style>{css}</style>
-      <div style={{maxWidth:540,margin:"0 auto"}}>
+      <div style={{maxWidth:520,margin:"0 auto"}}>
+
+        {/* Header */}
         <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{fontSize:11,letterSpacing:".2em",color:G.muted,fontFamily:"'JetBrains Mono'",marginBottom:6}}>CUENTA DE COBRO</div>
-          <div style={{fontSize:24,fontWeight:800}}>Comprobante de Pago</div>
+          <div style={{fontSize:11,letterSpacing:".2em",color:G.muted,fontFamily:"'JetBrains Mono'",marginBottom:6}}>HUELLAS SANAS · CUENTA DE COBRO</div>
+          <div style={{fontSize:22,fontWeight:800}}>{colaborador?.nombre}</div>
+          <div style={{color:G.gold,fontWeight:700,fontSize:18,marginTop:4}}>{turno && COP(turno.pago)}</div>
+          <div style={{color:G.muted,fontSize:12,marginTop:2}}>Turno del {turno && fmtFecha(turno.fecha)}</div>
         </div>
-        <div className="card fade" style={{marginBottom:16}}>
-          <div style={{borderBottom:`1px solid ${G.border}`,paddingBottom:14,marginBottom:16}}>
-            <div style={{fontSize:18,fontWeight:700}}>{colaborador.nombre}</div>
-            {colaborador.cedula && <div style={{color:G.muted,fontSize:12,marginTop:2}}>🪪 CC {colaborador.cedula}</div>}
-            {colaborador.celular && <div style={{color:G.muted,fontSize:12}}>📱 {colaborador.celular}</div>}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {[["Fecha",fmtFecha(turno.fecha)],["Entrada",fmtHora(turno.entrada)],["Almuerzo",turno.salida_almuerzo?`${fmtHora(turno.salida_almuerzo)} → ${fmtHora(turno.ingreso_almuerzo)}`:"Sin almuerzo"],["Salida",fmtHora(turno.salida)],["Horas trabajadas",`${minToHrs(turno.horas_trabajadas)} hrs`],["Valor / hora",COP(colaborador.valor_hora)]].map(([k,v])=>(
-              <div key={k} style={{background:G.surface,padding:"10px 12px",borderRadius:8}}>
-                <div style={{fontSize:10,color:G.muted,textTransform:"uppercase",letterSpacing:".08em",marginBottom:3,fontFamily:"'JetBrains Mono'"}}>{k}</div>
-                <div style={{fontWeight:600,fontSize:13}}>{v}</div>
+
+        {/* Indicador de pasos */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:24}}>
+          {[["🪪","Cédula"],["📱","Código SMS"],["✍️","Firma"]].map(([icon,label],i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,background:pasoActual>i+1?"#052e16":pasoActual===i+1?G.accent:G.surface,border:`1px solid ${pasoActual>i+1?G.green:pasoActual===i+1?G.accent:G.border}`}}>
+                {pasoActual>i+1?"✓":icon}
               </div>
-            ))}
-          </div>
-          <div style={{background:"linear-gradient(135deg,#1d4ed8,#1e40af)",borderRadius:10,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{color:"rgba(255,255,255,.7)",fontSize:12}}>Total a recibir</div>
-            <div style={{fontWeight:800,fontSize:28,color:"#fff"}}>{COP(turno.pago)}</div>
-          </div>
+              <div style={{fontSize:11,color:pasoActual===i+1?G.text:G.muted,display:window.innerWidth>400?"block":"none"}}>{label}</div>
+              {i<2&&<div style={{width:20,height:1,background:G.border}}/>}
+            </div>
+          ))}
         </div>
-        <div className="card fade">
-          {firmando
-            ? <div style={{textAlign:"center",padding:30}}><Spinner /><div style={{color:G.muted,marginTop:12,fontSize:13}}>Guardando firma...</div></div>
-            : <>
-                <FirmaCanvas onFirma={firmar} />
-                <div style={{color:G.muted,fontSize:11,marginTop:12,textAlign:"center",lineHeight:1.5}}>
-                  Al firmar confirmas que recibiste {COP(turno.pago)}<br/>correspondiente al turno del {fmtFecha(turno.fecha)}
-                </div>
-              </>
-          }
-        </div>
+
+        {/* Paso 1: Cédula */}
+        {estado==="cedula"&&(
+          <div className="card fade">
+            <div style={{fontWeight:700,fontSize:16,marginBottom:6}}>🪪 Verifica tu identidad</div>
+            <div style={{color:G.muted,fontSize:13,marginBottom:16}}>Ingresa tu número de cédula para continuar</div>
+            <div style={{marginBottom:12}}>
+              <label>Número de cédula</label>
+              <input type="number" placeholder="Ej: 1234567890" value={cedulaInput} onChange={e=>setCedulaInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&verificarCedula()} style={{fontSize:18,textAlign:"center",letterSpacing:".05em"}}/>
+            </div>
+            {errorMsg&&<div style={{color:G.red,fontSize:13,marginBottom:12,padding:"8px 12px",background:"#1f0a0a",borderRadius:6}}>⚠️ {errorMsg}</div>}
+            <button className="btn-primary" style={{width:"100%",padding:"13px 0",fontSize:15}} onClick={verificarCedula} disabled={enviandoOTP}>
+              {enviandoOTP?"Enviando código SMS...":"Verificar cédula →"}
+            </button>
+          </div>
+        )}
+
+        {/* Paso 2: OTP */}
+        {estado==="otp"&&(
+          <div className="card fade">
+            <div style={{fontWeight:700,fontSize:16,marginBottom:6}}>📱 Código de verificación</div>
+            <div style={{color:G.muted,fontSize:13,marginBottom:16}}>
+              Enviamos un código SMS al número <strong style={{color:G.text}}>{celularMask}</strong>. Ingresa el código de 6 dígitos:
+            </div>
+            <div style={{marginBottom:12}}>
+              <label>Código SMS</label>
+              <input type="number" placeholder="000000" value={otpInput} onChange={e=>setOtpInput(e.target.value.slice(0,6))} onKeyDown={e=>e.key==="Enter"&&verificarOTP()} style={{fontSize:28,textAlign:"center",letterSpacing:".3em",fontFamily:"'JetBrains Mono'"}}/>
+            </div>
+            {errorMsg&&<div style={{color:G.red,fontSize:13,marginBottom:12,padding:"8px 12px",background:"#1f0a0a",borderRadius:6}}>⚠️ {errorMsg}</div>}
+            <button className="btn-primary" style={{width:"100%",padding:"13px 0",fontSize:15,marginBottom:10}} onClick={verificarOTP}>
+              Verificar código →
+            </button>
+            <button className="btn-ghost" style={{width:"100%",fontSize:12}} onClick={()=>{setOtpInput("");setErrorMsg("");enviarOTP();}}>
+              Reenviar código
+            </button>
+          </div>
+        )}
+
+        {/* Paso 3: Firma */}
+        {(estado==="firma"||estado==="firmando")&&(
+          <>
+            <div className="card fade" style={{marginBottom:16}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {[["Fecha",fmtFecha(turno.fecha)],["Horas",`${minToHrs(turno.horas_trabajadas)} hrs`],["Entrada",fmtHora(turno.entrada)],["Salida",fmtHora(turno.salida)]].map(([k,v])=>(
+                  <div key={k} style={{background:G.surface,padding:"10px 12px",borderRadius:8}}>
+                    <div style={{fontSize:10,color:G.muted,textTransform:"uppercase",letterSpacing:".08em",marginBottom:3,fontFamily:"'JetBrains Mono'"}}>{k}</div>
+                    <div style={{fontWeight:600,fontSize:13}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:"linear-gradient(135deg,#1d4ed8,#1e40af)",borderRadius:10,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
+                <div style={{color:"rgba(255,255,255,.7)",fontSize:12}}>Total a recibir</div>
+                <div style={{fontWeight:800,fontSize:26,color:"#fff"}}>{COP(turno.pago)}</div>
+              </div>
+            </div>
+            <div className="card fade">
+              {estado==="firmando"
+                ? <div style={{textAlign:"center",padding:30}}><Spinner /><div style={{color:G.muted,marginTop:12,fontSize:13}}>Guardando firma...</div></div>
+                : <>
+                    <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>✍️ Firma de conformidad</div>
+                    <div style={{color:G.muted,fontSize:12,marginBottom:12}}>
+                      ✓ Cédula verificada &nbsp;·&nbsp; ✓ SMS confirmado al {celularMask}
+                    </div>
+                    <FirmaCanvas onFirma={firmar}/>
+                    <div style={{color:G.muted,fontSize:11,marginTop:12,textAlign:"center",lineHeight:1.5}}>
+                      Al firmar confirmas que recibiste {COP(turno.pago)}<br/>correspondiente al turno del {fmtFecha(turno.fecha)}
+                    </div>
+                  </>
+              }
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -398,10 +529,11 @@ export default function App() {
     try {
       const turno=turnos.find(t=>t.id===turnoId);
       const col=colaboradores.find(c=>c.id===turno.colaborador_id);
-      const cuenta=cuentas.find(c=>c.turno_id===turnoId);
+      // Recargar cuenta fresca para tener ip_firma actualizada
+      const {data:cuentaFresca}=await supabase.from("cuentas_cobro").select("*").eq("turno_id",turnoId).single();
       let firmaImg=null;
-      if(cuenta?.firmada){ const {data:f}=await supabase.from("firmas").select("firma_base64").eq("cuenta_cobro_id",cuenta.id).single(); firmaImg=f?.firma_base64||null; }
-      generarPDF(turno,col,cuenta,firmaImg);
+      if(cuentaFresca?.firmada){ const {data:f}=await supabase.from("firmas").select("firma_base64").eq("cuenta_cobro_id",cuentaFresca.id).single(); firmaImg=f?.firma_base64||null; }
+      generarPDF(turno,col,cuentaFresca||cuentas.find(c=>c.turno_id===turnoId),firmaImg);
     } catch(e){ showToast("Error al generar PDF","err"); }
     setGenerandoPDF(null);
   };
